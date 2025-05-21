@@ -270,7 +270,12 @@ def login():
                 return redirect(url_for('admin_dashboard'))
             elif user[3] == 'counselor':
                 logger.info("Redirecting to counselor_dashboard")
-                return redirect(url_for('counselor_dashboard'))
+                try:
+                    return redirect(url_for('counselor_dashboard'))
+                except BuildError:
+                    logger.error(f"Failed to redirect to counselor_dashboard for user: {username}")
+                    flash('Counselor dashboard is currently unavailable. Please try again later.')
+                    return redirect(url_for('login'))
         flash('Invalid username or password')
         logger.warning(f"Login failed for username: {username}")
     return render_template('login.html')

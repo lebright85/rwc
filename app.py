@@ -242,6 +242,7 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        logger.info(f"Login attempt for username: {username}")
         conn = get_db_connection()
         c = conn.cursor()
         c.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,))
@@ -250,11 +251,15 @@ def login():
         if user and bcrypt.check_password_hash(user[2], password):
             user_obj = User(user[0], user[1], user[3])
             login_user(user_obj)
+            logger.info(f"Login successful for user: {username}, role: {user[3]}")
             if user[3] == 'admin':
+                logger.info("Redirecting to admin_dashboard")
                 return redirect(url_for('admin_dashboard'))
             elif user[3] == 'counselor':
+                logger.info("Redirecting to counselor_dashboard")
                 return redirect(url_for('counselor_dashboard'))
         flash('Invalid username or password')
+        logger.warning(f"Login failed for username: {username}")
     return render_template('login.html')
 
 @app.route('/admin_dashboard')

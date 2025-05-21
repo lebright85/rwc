@@ -186,6 +186,10 @@ def init_db():
                 continue
             raise
 
+# Log startup details
+logger.info(f"Starting application: {__file__}")
+logger.info(f"App routes defined: {list(app.url_map.iter_rules())}")
+
 # Run init_db on app startup
 init_db()
 scheduler.start()
@@ -719,6 +723,33 @@ def manage_attendees():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/counselor_dashboard')
+@login_required
+def counselor_dashboard():
+    if current_user.role != 'counselor':
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT full_name, credentials FROM users WHERE id = %s AND role = 'counselor'",
+              (current_user.id,))
+    counselor = c.fetchone()
+    if not counselor:
+        flash('Counselor not found')
+        return redirect(url_for('login'))
+    counselor_name, counselor_credentials = counselor
+    today = datetime.today()
+    today_str = today.strftime('%Y-%m-%d')
+    week_later = (today + timedelta(days=7)).strftime('%Y-%m-%d')
+    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date = %s",
+              (current_user.id, today_str))
+    today_classes = c.fetchall()
+    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
+              (current_user.id, (today + timedelta(days=1)).strftime('%Y-%m-%d'), week_later))
+    upcoming_classes = c.fetchall()
+    conn.close()
+    return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes,
+                           today=today_str, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

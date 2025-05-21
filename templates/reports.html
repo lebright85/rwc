@@ -1,54 +1,54 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
-    <h2 class="text-2xl font-bold mb-4">Reports</h2>
-    <a href="{{ url_for('admin_dashboard') }}" class="text-blue-600 hover:text-blue-800 mb-6 inline-block">← Back to Dashboard</a>
+<div class="max-w-5xl mx-auto">
+    <h2 class="text-2xl font-bold mb-4">Attendance Reports</h2>
     
-    <!-- Filter Form -->
+    <!-- Report Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h3 class="text-lg font-semibold mb-4">Filter Attendance Records</h3>
         <form method="POST" action="{{ url_for('reports') }}">
+            <input type="hidden" name="action" value="generate">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label for="start_date" class="block text-gray-700">Start Date</label>
-                    <input type="date" name="start_date" id="start_date" value="{{ start_date }}" class="w-full p-2 border rounded">
+                    <input type="date" name="start_date" id="start_date" value="{{ start_date }}" class="w-full p-2 border rounded" required>
                 </div>
                 <div>
                     <label for="end_date" class="block text-gray-700">End Date</label>
-                    <input type="date" name="end_date" id="end_date" value="{{ end_date }}" class="w-full p-2 border rounded">
+                    <input type="date" name="end_date" id="end_date" value="{{ end_date }}" class="w-full p-2 border rounded" required>
                 </div>
             </div>
             <div class="mb-4">
-                <label for="class_id" class="block text-gray-700">Class (optional)</label>
+                <label for="class_id" class="block text-gray-700">Class</label>
                 <select name="class_id" id="class_id" class="w-full p-2 border rounded">
-                    <option value="">All Classes</option>
+                    <option value="all" {% if class_id == 'all' or class_id == '' %}selected{% endif %}>All Classes</option>
                     {% for class in classes %}
                         <option value="{{ class[0] }}" {% if class_id == class[0]|string %}selected{% endif %}>{{ class[1] }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="mb-4">
-                <label for="attendee_id" class="block text-gray-700">Attendee (optional)</label>
+                <label for="attendee_id" class="block text-gray-700">Attendee</label>
                 <select name="attendee_id" id="attendee_id" class="w-full p-2 border rounded">
-                    <option value="">All Attendees</option>
+                    <option value="all" {% if attendee_id == 'all' or attendee_id == '' %}selected{% endif %}>All Attendees</option>
                     {% for attendee in attendees %}
                         <option value="{{ attendee[0] }}" {% if attendee_id == attendee[0]|string %}selected{% endif %}>{{ attendee[1] }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="mb-4">
-                <label for="counselor_id" class="block text-gray-700">Counselor (optional)</label>
+                <label for="counselor_id" class="block text-gray-700">Counselor</label>
                 <select name="counselor_id" id="counselor_id" class="w-full p-2 border rounded">
-                    <option value="">All Counselors</option>
+                    <option value="all" {% if counselor_id == 'all' or counselor_id == '' %}selected{% endif %}>All Counselors</option>
                     {% for counselor in counselors %}
                         <option value="{{ counselor[0] }}" {% if counselor_id == counselor[0]|string %}selected{% endif %}>{{ counselor[1] }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="flex space-x-2">
-                <button type="submit" name="action" value="generate" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Generate Report</button>
-                <button type="submit" name="action" value="download_csv" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Download as CSV</button>
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Generate Report</button>
+                <button type="submit" name="action" value="download_csv" class="bg-green-600 text-white p-2 rounded hover:bg-green-700">Download CSV</button>
             </div>
         </form>
     </div>
@@ -57,32 +57,46 @@
     <div class="bg-white p-6 rounded-lg shadow-md">
         <h3 class="text-lg font-semibold mb-4">Report Results</h3>
         {% if report_records %}
-            <table class="w-full table-auto">
-                <thead>
-                    <tr class="bg-gray-200">
-                        <th class="px-4 py-2">Class Name</th>
-                        <th class="px-4 py-2">Attendee</th>
-                        <th class="px-4 py-2">Time In</th>
-                        <th class="px-4 py-2">Time Out</th>
-                        <th class="px-4 py-2">Engagement</th>
-                        <th class="px-4 py-2">Comments</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for record in report_records %}
-                        <tr>
-                            <td class="border px-4 py-2">{{ record[0] }}</td>
-                            <td class="border px-4 py-2">{{ record[7] }}</td>
-                            <td class="border px-4 py-2">{{ record[11] }}</td>
-                            <td class="border px-4 py-2">{{ record[12] or 'Not set' }}</td>
-                            <td class="border px-4 py-2">{{ record[10] }}</td>
-                            <td class="border px-4 py-2">{{ record[13] or '' }}</td>
+            <div class="overflow-x-auto">
+                <table class="w-full table-auto">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="p-2 text-left">Class Name</th>
+                            <th class="p-2 text-left">Group</th>
+                            <th class="p-2 text-left">Date</th>
+                            <th class="p-2 text-left">Hours</th>
+                            <th class="p-2 text-left">Location</th>
+                            <th class="p-2 text-left">Counselor</th>
+                            <th class="p-2 text-left">Attendee</th>
+                            <th class="p-2 text-left">ID</th>
+                            <th class="p-2 text-left">Engagement</th>
+                            <th class="p-2 text-left">Time In</th>
+                            <th class="p-2 text-left">Time Out</th>
+                            <th class="p-2 text-left">Comments</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for record in report_records %}
+                            <tr class="border-b">
+                                <td class="p-2">{{ record[0] }}</td>
+                                <td class="p-2">{{ record[1] }}</td>
+                                <td class="p-2">{{ record[2] }}</td>
+                                <td class="p-2">{{ record[3] }}</td>
+                                <td class="p-2">{{ record[4] }}</td>
+                                <td class="p-2">{{ record[5] }} {% if record[6] %}({{ record[6] }}){% endif %}</td>
+                                <td class="p-2">{{ record[7] }}</td>
+                                <td class="p-2">{{ record[8] }}</td>
+                                <td class="p-2">{{ record[10] }}</td>
+                                <td class="p-2">{{ record[11] }}</td>
+                                <td class="p-2">{{ record[12] or 'Not set' }}</td>
+                                <td class="p-2">{{ record[13] or '' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
-            <p class="text-gray-700">No records found for the selected filters.</p>
+            <p class="text-gray-600">No attendance records available. Adjust filters and try again.</p>
         {% endif %}
     </div>
 </div>

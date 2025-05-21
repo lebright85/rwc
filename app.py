@@ -53,6 +53,7 @@ def init_db():
         try:
             conn = get_db_connection()
             c = conn.cursor()
+            # Drop tables in reverse order to avoid foreign key constraints
             c.execute("DROP TABLE IF EXISTS attendance CASCADE")
             c.execute("DROP TABLE IF EXISTS class_attendees CASCADE")
             c.execute("DROP TABLE IF EXISTS attendees CASCADE")
@@ -60,6 +61,7 @@ def init_db():
             c.execute("DROP TABLE IF EXISTS users CASCADE")
             logger.info("Existing tables dropped")
 
+            # Create tables
             c.execute('''CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -115,6 +117,7 @@ def init_db():
             )''')
             logger.info("Class_attendees table created")
 
+            # Insert sample data
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                       ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
@@ -356,37 +359,23 @@ def reports():
         report_records = []
     
     if action == 'download_csv':
-        try:
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerow(['Class Name', 'Class Group', 'Date', 'Group Hour', 'Location',
-                             'Counselor', 'Counselor Credentials', 'Attendee Name', 'ID', 'Group',
-                             'Engagement', 'Time In', 'Time Out', 'Comments'])
-            if not report_records:
-                logger.warning("No records to include in CSV download")
-                flash('No attendance records found to download as CSV', 'info')
-                conn.close()
-                return redirect(url_for('reports'))
-            for record in report_records:
-                writer.writerow([
-                    record[0], record[1], record[2], record[3], record[4],
-                    record[5], record[6] or '', record[7], record[8], record[9] or '',
-                    record[10], record[11], record[12] or 'Not set', record[13] or ''
-                ])
-            csv_content = output.getvalue()
-            output.close()
-            logger.info("CSV file generated successfully")
-            conn.close()
-            return Response(
-                csv_content,
-                mimetype='text/csv',
-                headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
-            )
-        except Exception as e:
-            logger.error(f"Error generating CSV: {e}")
-            flash('An error occurred while generating the CSV file', 'error')
-            conn.close()
-            return redirect(url_for('reports'))
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Class Name', 'Class Group', 'Date', 'Group Hour', 'Location',
+                         'Counselor', 'Counselor Credentials', 'Attendee Name', 'ID', 'Group',
+                         'Engagement', 'Time In', 'Time Out', 'Comments'])
+        for record in report_records:
+            writer.writerow([
+                record[0], record[1], record[2], record[3], record[4],
+                record[5], record[6] or '', record[7], record[8], record[9] or '',
+                record[10], record[11], record[12] or 'Not set', record[13] or ''
+            ])
+        conn.close()
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
+        )
     
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, 

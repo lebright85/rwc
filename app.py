@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from flask import Flask, render_template, request, redirect, url_for, flash, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
@@ -51,109 +52,132 @@ def get_db_connection():
 scheduler = BackgroundScheduler(jobstores={
     'default': SQLAlchemyJobStore(url=os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/dbname'))
 })
-scheduler.start()
 
 # SQLite Database Setup (modified for PostgreSQL)
 def init_db():
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        # Users table
-        c.execute('''CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            credentials TEXT,
-            email TEXT
-        )''')
-        # Classes table with recurrence fields
-        c.execute('''CREATE TABLE IF NOT EXISTS classes (
-            id SERIAL PRIMARY KEY,
-            group_name TEXT NOT NULL,
-            class_name TEXT NOT NULL,
-            date TEXT NOT NULL,
-            group_hours TEXT NOT NULL,
-            counselor_id INTEGER,
-            group_type TEXT,
-            notes TEXT,
-            location TEXT,
-            recurring INTEGER NOT NULL DEFAULT 0,
-            frequency TEXT,
-            FOREIGN KEY (counselor_id) REFERENCES users(id)
-        )''')
-        # Attendees table
-        c.execute('''CREATE TABLE IF NOT EXISTS attendees (
-            id SERIAL PRIMARY KEY,
-            full_name TEXT NOT NULL,
-            attendee_id TEXT UNIQUE NOT NULL,
-            "group" TEXT,
-            group_details TEXT,
-            notes TEXT
-        )''')
-        # Attendance table
-        c.execute('''CREATE TABLE IF NOT EXISTS attendance (
-            id SERIAL PRIMARY KEY,
-            class_id INTEGER,
-            attendee_id INTEGER,
-            time_in TEXT,
-            time_out TEXT,
-            engagement TEXT,
-            comments TEXT,
-            FOREIGN KEY (class_id) REFERENCES classes(id),
-            FOREIGN KEY (attendee_id) REFERENCES attendees(id)
-        )''')
-        # Class-Attendee assignments table
-        c.execute('''CREATE TABLE IF NOT EXISTS class_attendees (
-            class_id INTEGER,
-            attendee_id INTEGER,
-            PRIMARY KEY (class_id, attendee_id),
-            FOREIGN KEY (class_id) REFERENCES classes(id),
-            FOREIGN KEY (attendee_id) REFERENCES attendees(id)
-        )''')
-        # Insert default users with hashed passwords
-        c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
-        c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('counselor1', bcrypt.generate_password_hash('counselor123').decode('utf-8'), 'Jane Doe', 'counselor', 'Clinical Trainee', 'jane@example.com'))
-        c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('counselor2', bcrypt.generate_password_hash('counselor456').decode('utf-8'), 'Mark Johnson', 'counselor', 'Therapist', 'mark@example.com'))
-        # Define dynamic dates for sample data
-        today = '2025-05-21'  # For testing, align with current date
-        tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-        day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
-        # Insert sample classes, including a recurring class
-        c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('Group A', 'Mindfulness', today, '10:00-11:30', 2, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
-        c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('Group D', 'Yoga Session', today, '13:00-14:00', 3, 'Wellness', 'Beginner-friendly', 'Zoom', 0, None))
-        c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('Group B', 'Stress Management', tomorrow, '14:00-15:30', 2, 'Workshop', 'Interactive session', 'Zoom', 0, None))
-        c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('Group C', 'Coping Skills', day_after, '09:00-10:30', 3, 'Therapy', 'Group discussion', 'Office', 0, None))
-        # Insert sample attendee
-        c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  ('John Smith', 'ATT001', 'Group A', 'Morning Session', 'Requires extra support'))
-        # Insert sample attendance
-        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  (1, 1, '10:00', '11:30', 'Yes', 'Actively participated'))
-        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                  (2, 1, '13:00', '14:00', 'Yes', 'Good participation'))
-        # Insert sample class-attendee assignments
-        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (1, 1))
-        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (2, 1))
-        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (3, 1))
-        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (4, 1))
-        conn.commit()
-        conn.close()
-        logger.info("Database initialized successfully")
-    except psycopg2.Error as e:
-        logger.error(f"Database initialization failed: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error during database initialization: {e}")
-        raise
+    max_retries = 3
+    retry_delay = 5  # seconds
+    for attempt in range(max_retries):
+        try:
+            conn = get_db_connection()
+            c = conn.cursor()
+            # Users table
+            c.execute('''CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                credentials TEXT,
+                email TEXT
+            )''')
+            logger.info("Users table created or already exists")
+            # Classes table with recurrence fields
+            c.execute('''CREATE TABLE IF NOT EXISTS classes (
+                id SERIAL PRIMARY KEY,
+                group_name TEXT NOT NULL,
+                class_name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                group_hours TEXT NOT NULL,
+                counselor_id INTEGER,
+                group_type TEXT,
+                notes TEXT,
+                location TEXT,
+                recurring INTEGER NOT NULL DEFAULT 0,
+                frequency TEXT,
+                FOREIGN KEY (counselor_id) REFERENCES users(id)
+            )''')
+            logger.info("Classes table created or already exists")
+            # Attendees table
+            c.execute('''CREATE TABLE IF NOT EXISTS attendees (
+                id SERIAL PRIMARY KEY,
+                full_name TEXT NOT NULL,
+                attendee_id TEXT UNIQUE NOT NULL,
+                "group" TEXT,
+                group_details TEXT,
+                notes TEXT
+            )''')
+            logger.info("Attendees table created or already exists")
+            # Attendance table
+            c.execute('''CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                class_id INTEGER,
+                attendee_id INTEGER,
+                time_in TEXT,
+                time_out TEXT,
+                engagement TEXT,
+                comments TEXT,
+                FOREIGN KEY (class_id) REFERENCES classes(id),
+                FOREIGN KEY (attendee_id) REFERENCES attendees(id)
+            )''')
+            logger.info("Attendance table created or already exists")
+            # Class-Attendee assignments table
+            c.execute('''CREATE TABLE IF NOT EXISTS class_attendees (
+                class_id INTEGER,
+                attendee_id INTEGER,
+                PRIMARY KEY (class_id, attendee_id),
+                FOREIGN KEY (class_id) REFERENCES classes(id),
+                FOREIGN KEY (attendee_id) REFERENCES attendees(id)
+            )''')
+            logger.info("Class_attendees table created or already exists")
+            # Insert default users with hashed passwords
+            c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
+            c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('counselor1', bcrypt.generate_password_hash('counselor123').decode('utf-8'), 'Jane Doe', 'counselor', 'Clinical Trainee', 'jane@example.com'))
+            c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('counselor2', bcrypt.generate_password_hash('counselor456').decode('utf-8'), 'Mark Johnson', 'counselor', 'Therapist', 'mark@example.com'))
+            logger.info("Sample users inserted")
+            # Define dynamic dates for sample data
+            today = '2025-05-21'  # For testing, align with current date
+            tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+            day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
+            # Insert sample classes, including a recurring class
+            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('Group A', 'Mindfulness', today, '10:00-11:30', 2, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
+            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('Group D', 'Yoga Session', today, '13:00-14:00', 3, 'Wellness', 'Beginner-friendly', 'Zoom', 0, None))
+            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('Group B', 'Stress Management', tomorrow, '14:00-15:30', 2, 'Workshop', 'Interactive session', 'Zoom', 0, None))
+            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('Group C', 'Coping Skills', day_after, '09:00-10:30', 3, 'Therapy', 'Group discussion', 'Office', 0, None))
+            logger.info("Sample classes inserted")
+            # Insert sample attendee
+            c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      ('John Smith', 'ATT001', 'Group A', 'Morning Session', 'Requires extra support'))
+            logger.info("Sample attendee inserted")
+            # Insert sample attendance
+            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      (1, 1, '10:00', '11:30', 'Yes', 'Actively participated'))
+            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                      (2, 1, '13:00', '14:00', 'Yes', 'Good participation'))
+            logger.info("Sample attendance inserted")
+            # Insert sample class-attendee assignments
+            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (1, 1))
+            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (2, 1))
+            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (3, 1))
+            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (4, 1))
+            logger.info("Sample class-attendee assignments inserted")
+            conn.commit()
+            conn.close()
+            logger.info("Database initialized successfully")
+            return
+        except psycopg2.Error as e:
+            logger.error(f"Database initialization failed on attempt {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during database initialization on attempt {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+
+# Run init_db on app startup
+init_db()
+scheduler.start()
 
 # Scheduler job to generate recurring class instances
 def generate_recurring_classes():
@@ -678,5 +702,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

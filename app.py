@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from urllib.parse import urlparse
+from werkzeug.routing import BuildError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,15 @@ app.jinja_env.add_extension('jinja2.ext.do')
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Custom Jinja2 filter to safely handle url_for
+def safe_url_for(endpoint, **values):
+    try:
+        return url_for(endpoint, **values)
+    except BuildError:
+        logger.warning(f"Failed to build URL for endpoint: {endpoint}")
+        return '#'
+app.jinja_env.filters['safe_url_for'] = safe_url_for
 
 def get_db_connection():
     try:

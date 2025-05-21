@@ -4,24 +4,11 @@
 <div class="max-w-5xl mx-auto">
     <h2 class="text-2xl font-bold mb-4">Attendance Reports</h2>
     
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="mb-4">
-                {% for category, message in messages %}
-                    <div class="p-4 rounded {% if category == 'info' %}bg-blue-100 text-blue-700{% elif category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-    
     <!-- Report Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h3 class="text-lg font-semibold mb-4">Filter Attendance Records</h3>
-        <form method="POST" action="{{ url_for('reports') }}" id="reportForm">
-            <input type="hidden" name="action" value="generate" id="formAction">
+        <form method="POST" action="{{ url_for('reports') }}">
+            <input type="hidden" name="action" value="generate">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label for="start_date" class="block text-gray-700">Start Date</label>
@@ -61,7 +48,7 @@
             </div>
             <div class="flex space-x-2">
                 <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Generate Report</button>
-                <button type="button" onclick="downloadCSV()" class="bg-green-600 text-white p-2 rounded hover:bg-green-700">Download CSV</button>
+                <button type="submit" name="action" value="download_csv" class="bg-green-600 text-white p-2 rounded hover:bg-green-700">Download CSV</button>
             </div>
         </form>
     </div>
@@ -113,14 +100,4 @@
         {% endif %}
     </div>
 </div>
-
-<script>
-function downloadCSV() {
-    const form = document.getElementById('reportForm');
-    const actionInput = document.getElementById('formAction');
-    actionInput.value = 'download_csv';
-    form.submit();
-    actionInput.value = 'generate'; // Reset to default
-}
-</script>
 {% endblock %}

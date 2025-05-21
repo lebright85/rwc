@@ -320,6 +320,7 @@ def reports():
     counselor_id = request.form.get('counselor_id', '')
     action = request.form.get('action', '')
     
+    # Build dynamic query
     query = """
         SELECT c.class_name, c.group_name, c.date, c.group_hours, c.location,
                u.full_name AS counselor_name, u.credentials AS counselor_credentials,
@@ -336,18 +337,26 @@ def reports():
     if start_date and end_date:
         query += " AND c.date BETWEEN %s AND %s"
         params.extend([start_date, end_date])
-    if class_id:
+    if class_id and class_id != 'all':
         query += " AND a.class_id = %s"
         params.append(class_id)
-    if attendee_id:
+    if attendee_id and attendee_id != 'all':
         query += " AND a.attendee_id = %s"
         params.append(attendee_id)
-    if counselor_id:
+    if counselor_id and counselor_id != 'all':
         query += " AND c.counselor_id = %s"
         params.append(counselor_id)
     
-    c.execute(query, params)
-    report_records = c.fetchall()
+    try:
+        c.execute(query, params)
+        report_records = c.fetchall()
+        logger.info(f"Report query executed with {len(report_records)} records returned")
+        if not report_records and action == 'generate':
+            flash('No attendance records found for the selected filters', 'info')
+    except psycopg2.Error as e:
+        logger.error(f"Error executing report query: {e}")
+        flash('An error occurred while generating the report', 'error')
+        report_records = []
     
     if action == 'download_csv':
         output = io.StringIO()
@@ -372,74 +381,6 @@ def reports():
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, 
                            report_records=report_records, start_date=start_date, end_date=end_date, 
                            class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id)
-
-@app.route('/counselor_dashboard')
-@login_required
-def counselor_dashboard():
-    if current_user.role != 'counselor':
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT full_name, credentials FROM users WHERE id = %s AND role = 'counselor'",
-              (current_user.id,))
-    counselor = c.fetchone()
-    if not counselor:
-        flash('Counselor not found')
-        return redirect(url_for('login'))
-    counselor_name, counselor_credentials = counselor
-    today = datetime.today()
-    today_str = today.strftime('%Y-%m-%d')
-    week_later = (datetime.today() + timedelta(days=7)).strftime('%Y-%m-%d')
-    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date = %s",
-              (current_user.id, today_str))
-    today_classes = c.fetchall()
-    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
-              (current_user.id, (today + timedelta(days=1)).strftime('%Y-%m-%d'), week_later))
-    upcoming_classes = c.fetchall()
-    conn.close()
-    return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes,
-                           today=today_str, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
-
-@app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
-@login_required
-def class_attendance(class_id):
-    if current_user.role != 'counselor':
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT id, group_name, class_name, date, group_hours FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
-    class_info = c.fetchone()
-    if not class_info:
-        flash('Class not found or not assigned to you')
-        return redirect(url_for('counselor_dashboard'))
-    
-    if request.method == 'POST':
-        attendee_id = request.form['attendee_id']
-        time_in = request.form['time_in']
-        time_out = request.form.get('time_out', '')
-        engagement = request.form['engagement']
-        comments = request.form.get('comments', '')
-        c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
-        if not c.fetchone():
-            flash('Attendee not assigned to this class')
-            return redirect(url_for('class_attendance', class_id=class_id))
-        c.execute("SELECT id FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
-        existing = c.fetchone()
-        if existing:
-            c.execute("UPDATE attendance SET time_in = %s, time_out = %s, engagement = %s, comments = %s WHERE class_id = %s AND attendee_id = %s",
-                      (time_in, time_out or None, engagement, comments, class_id, attendee_id))
-        else:
-            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                      (class_id, attendee_id, time_in, time_out or None, engagement, comments))
-        conn.commit()
-        flash('Attendance recorded successfully')
-    
-    c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s", (class_id,))
-    attendees = c.fetchall()
-    c.execute("SELECT a.attendee_id, att.full_name, a.time_in, a.time_out, a.engagement, a.comments FROM attendance a JOIN attendees att ON a.attendee_id = att.id WHERE a.class_id = %s", (class_id,))
-    attendance_records = c.fetchall()
-    conn.close()
-    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
 
 @app.route('/manage_users', methods=['GET', 'POST'])
 @login_required

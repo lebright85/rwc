@@ -17,20 +17,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')  # Use env variable in production
+app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
 
-# Initialize Flask-Bcrypt
 bcrypt = Bcrypt(app)
-
-# Enable Jinja2 'do' extension
 app.jinja_env.add_extension('jinja2.ext.do')
-
-# Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Database connection
 def get_db_connection():
     try:
         db_url = os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/dbname')
@@ -48,20 +42,17 @@ def get_db_connection():
         logger.error(f"Failed to connect to database: {e}")
         raise
 
-# Initialize APScheduler with PostgreSQL job store
 scheduler = BackgroundScheduler(jobstores={
     'default': SQLAlchemyJobStore(url=os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/dbname'))
 })
 
-# SQLite Database Setup (modified for PostgreSQL)
 def init_db():
     max_retries = 3
-    retry_delay = 5  # seconds
+    retry_delay = 5
     for attempt in range(max_retries):
         try:
             conn = get_db_connection()
             c = conn.cursor()
-            # Users table
             c.execute('''CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -72,7 +63,6 @@ def init_db():
                 email TEXT
             )''')
             logger.info("Users table created or already exists")
-            # Classes table with recurrence fields
             c.execute('''CREATE TABLE IF NOT EXISTS classes (
                 id SERIAL PRIMARY KEY,
                 group_name TEXT NOT NULL,
@@ -88,7 +78,6 @@ def init_db():
                 FOREIGN KEY (counselor_id) REFERENCES users(id)
             )''')
             logger.info("Classes table created or already exists")
-            # Attendees table
             c.execute('''CREATE TABLE IF NOT EXISTS attendees (
                 id SERIAL PRIMARY KEY,
                 full_name TEXT NOT NULL,
@@ -98,7 +87,6 @@ def init_db():
                 notes TEXT
             )''')
             logger.info("Attendees table created or already exists")
-            # Attendance table
             c.execute('''CREATE TABLE IF NOT EXISTS attendance (
                 id SERIAL PRIMARY KEY,
                 class_id INTEGER,
@@ -111,7 +99,6 @@ def init_db():
                 FOREIGN KEY (attendee_id) REFERENCES attendees(id)
             )''')
             logger.info("Attendance table created or already exists")
-            # Class-Attendee assignments table
             c.execute('''CREATE TABLE IF NOT EXISTS class_attendees (
                 class_id INTEGER,
                 attendee_id INTEGER,
@@ -120,7 +107,6 @@ def init_db():
                 FOREIGN KEY (attendee_id) REFERENCES attendees(id)
             )''')
             logger.info("Class_attendees table created or already exists")
-            # Insert default users with hashed passwords
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
@@ -128,11 +114,9 @@ def init_db():
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       ('counselor2', bcrypt.generate_password_hash('counselor456').decode('utf-8'), 'Mark Johnson', 'counselor', 'Therapist', 'mark@example.com'))
             logger.info("Sample users inserted")
-            # Define dynamic dates for sample data
-            today = '2025-05-21'  # For testing, align with current date
+            today = '2025-05-21'
             tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
             day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
-            # Insert sample classes, including a recurring class
             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       ('Group A', 'Mindfulness', today, '10:00-11:30', 2, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
@@ -142,17 +126,14 @@ def init_db():
             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       ('Group C', 'Coping Skills', day_after, '09:00-10:30', 3, 'Therapy', 'Group discussion', 'Office', 0, None))
             logger.info("Sample classes inserted")
-            # Insert sample attendee
             c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       ('John Smith', 'ATT001', 'Group A', 'Morning Session', 'Requires extra support'))
             logger.info("Sample attendee inserted")
-            # Insert sample attendance
             c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       (1, 1, '10:00', '11:30', 'Yes', 'Actively participated'))
             c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                       (2, 1, '13:00', '14:00', 'Yes', 'Good participation'))
             logger.info("Sample attendance inserted")
-            # Insert sample class-attendee assignments
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (1, 1))
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (2, 1))
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (3, 1))
@@ -179,7 +160,6 @@ def init_db():
 init_db()
 scheduler.start()
 
-# Scheduler job to generate recurring class instances
 def generate_recurring_classes():
     conn = get_db_connection()
     c = conn.cursor()
@@ -214,10 +194,8 @@ def generate_recurring_classes():
     conn.close()
     logger.info("Recurring classes generated")
 
-# Schedule the job to run daily
 scheduler.add_job(generate_recurring_classes, 'interval', days=1, id='generate_recurring_classes', replace_existing=True)
 
-# User class for Flask-Login
 class User(UserMixin):
     def __init__(self, id, username, role):
         self.id = id
@@ -235,7 +213,6 @@ def load_user(user_id):
         return User(user[0], user[1], user[2])
     return None
 
-# Routes
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -518,22 +495,38 @@ def manage_users():
                 flash('Username already exists')
         elif action == 'delete_counselor':
             counselor_id = request.form['counselor_id']
-            c.execute("DELETE FROM users WHERE id = %s AND role = 'counselor'", (counselor_id,))
-            conn.commit()
-            flash('Counselor deleted successfully')
+            try:
+                # Delete dependent classes first
+                c.execute("DELETE FROM classes WHERE counselor_id = %s", (counselor_id,))
+                c.execute("DELETE FROM users WHERE id = %s AND role = 'counselor'", (counselor_id,))
+                conn.commit()
+                flash('Counselor and associated classes deleted successfully')
+            except psycopg2.errors.ForeignKeyViolation:
+                flash('Cannot delete counselor because they are referenced in other records')
+            except psycopg2.Error as e:
+                logger.error(f"Error deleting counselor: {e}")
+                flash('An error occurred while deleting the counselor')
         elif action == 'delete_admin':
             admin_id = request.form['admin_id']
             if int(admin_id) == current_user.id:
                 flash('You cannot delete your own account')
             else:
-                c.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-                admin_count = c.fetchone()[0]
-                if admin_count <= 1:
-                    flash('Cannot delete the last admin account')
-                else:
-                    c.execute("DELETE FROM users WHERE id = %s AND role = 'admin'", (admin_id,))
-                    conn.commit()
-                    flash('Admin deleted successfully')
+                try:
+                    c.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+                    admin_count = c.fetchone()[0]
+                    if admin_count <= 1:
+                        flash('Cannot delete the last admin account')
+                    else:
+                        # Delete dependent classes first
+                        c.execute("DELETE FROM classes WHERE counselor_id = %s", (admin_id,))
+                        c.execute("DELETE FROM users WHERE id = %s AND role = 'admin'", (admin_id,))
+                        conn.commit()
+                        flash('Admin and associated classes deleted successfully')
+                except psycopg2.errors.ForeignKeyViolation:
+                    flash('Cannot delete admin because they are referenced in other records')
+                except psycopg2.Error as e:
+                    logger.error(f"Error deleting admin: {e}")
+                    flash('An error occurred while deleting the admin')
     c.execute("SELECT id, username, full_name, role, credentials, email FROM users WHERE role IN ('counselor', 'admin')")
     users = c.fetchall()
     conn.close()
@@ -616,10 +609,16 @@ def manage_classes():
                 flash('Class update failed due to duplicate or invalid data')
         elif action == 'delete':
             class_id = request.form['class_id']
-            c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
-            c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
-            conn.commit()
-            flash('Class deleted successfully')
+            try:
+                # Delete dependent records first
+                c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+                c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
+                conn.commit()
+                flash('Class deleted successfully')
+            except psycopg2.Error as e:
+                logger.error(f"Error deleting class: {e}")
+                flash('An error occurred while deleting the class')
         elif action == 'assign_attendee':
             class_id = request.form['class_id']
             attendee_id = request.form['attendee_id']
@@ -687,9 +686,18 @@ def manage_attendees():
                 flash('Attendee ID already exists')
         elif action == 'delete':
             attendee_id = request.form['attendee_id']
-            c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
-            conn.commit()
-            flash('Attendee deleted successfully')
+            try:
+                # Delete dependent records first
+                c.execute("DELETE FROM class_attendees WHERE attendee_id = %s", (attendee_id,))
+                c.execute("DELETE FROM attendance WHERE attendee_id = %s", (attendee_id,))
+                c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
+                conn.commit()
+                flash('Attendee deleted successfully')
+            except psycopg2.errors.ForeignKeyViolation:
+                flash('Cannot delete attendee because they are referenced in other records')
+            except psycopg2.Error as e:
+                logger.error(f"Error deleting attendee: {e}")
+                flash('An error occurred while deleting the attendee')
     c.execute("SELECT id, full_name, attendee_id, \"group\", group_details, notes FROM attendees")
     attendees = c.fetchall()
     conn.close()

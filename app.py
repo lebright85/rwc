@@ -53,7 +53,6 @@ def init_db():
         try:
             conn = get_db_connection()
             c = conn.cursor()
-            # Drop tables in reverse order to avoid foreign key constraints
             c.execute("DROP TABLE IF EXISTS attendance CASCADE")
             c.execute("DROP TABLE IF EXISTS class_attendees CASCADE")
             c.execute("DROP TABLE IF EXISTS attendees CASCADE")
@@ -61,7 +60,6 @@ def init_db():
             c.execute("DROP TABLE IF EXISTS users CASCADE")
             logger.info("Existing tables dropped")
 
-            # Create tables
             c.execute('''CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -117,7 +115,6 @@ def init_db():
             )''')
             logger.info("Class_attendees table created")
 
-            # Insert sample data
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                       ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
             c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
@@ -315,10 +312,13 @@ def reports():
     default_end_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
     start_date = request.form.get('start_date', default_start_date)
     end_date = request.form.get('end_date', default_end_date)
-    class_id = request.form.get('class_id', '')
-    attendee_id = request.form.get('attendee_id', '')
-    counselor_id = request.form.get('counselor_id', '')
-    action = request.form.get('action', '')
+    class_id = request.form.get('class_id', 'all')
+    attendee_id = request.form.get('attendee_id', 'all')
+    counselor_id = request.form.get('counselor_id', 'all')
+    action = request.form.get('action', 'generate')
+    
+    # Log filter values
+    logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, action={action}")
     
     # Build dynamic query
     query = """
@@ -326,56 +326,86 @@ def reports():
                u.full_name AS counselor_name, u.credentials AS counselor_credentials,
                att.full_name AS attendee_name, att.attendee_id, att."group",
                a.engagement, a.time_in, a.time_out, a.comments
-        FROM attendance a
-        JOIN classes c ON a.class_id = c.id
-        JOIN attendees att ON a.attendee_id = att.id
+        FROM classes c
         JOIN users u ON c.counselor_id = u.id
+        LEFT JOIN attendance a ON a.class_id = c.id
+        LEFT JOIN attendees att ON a.attendee_id = att.id
         WHERE 1=1
     """
     params = []
     
-    if start_date and end_date:
-        query += " AND c.date BETWEEN %s AND %s"
-        params.extend([start_date, end_date])
-    if class_id and class_id != 'all':
-        query += " AND a.class_id = %s"
-        params.append(class_id)
-    if attendee_id and attendee_id != 'all':
-        query += " AND a.attendee_id = %s"
-        params.append(attendee_id)
-    if counselor_id and counselor_id != 'all':
-        query += " AND c.counselor_id = %s"
-        params.append(counselor_id)
-    
     try:
+        # Validate and apply date filters
+        if start_date and end_date:
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                if start_dt <= end_dt:
+                    query += " AND c.date >= %s AND c.date <= %s"
+                    params.extend([start_date, end_date])
+                else:
+                    flash('Start date must be before end date', 'error')
+                    raise ValueError("Invalid date range")
+            except ValueError as e:
+                logger.error(f"Invalid date format: {e}")
+                flash('Invalid date format. Please use YYYY-MM-DD', 'error')
+                raise
+        else:
+            flash('Start and end dates are required', 'error')
+            raise ValueError("Missing date filters")
+
+        # Apply other filters
+        if class_id and class_id != 'all':
+            query += " AND c.id = %s"
+            params.append(int(class_id))
+        if attendee_id and attendee_id != 'all':
+            query += " AND a.attendee_id = %s"
+            params.append(int(attendee_id))
+        if counselor_id and counselor_id != 'all':
+            query += " AND c.counselor_id = %s"
+            params.append(int(counselor_id))
+        
         c.execute(query, params)
         report_records = c.fetchall()
-        logger.info(f"Report query executed with {len(report_records)} records returned")
+        logger.info(f"Report query executed with {len(report_records)} records returned for classes: {[r[0] for r in report_records]}")
         if not report_records and action == 'generate':
-            flash('No attendance records found for the selected filters', 'info')
-    except psycopg2.Error as e:
+            flash('No classes found for the selected filters', 'info')
+    except (psycopg2.Error, ValueError) as e:
         logger.error(f"Error executing report query: {e}")
-        flash('An error occurred while generating the report', 'error')
         report_records = []
     
     if action == 'download_csv':
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(['Class Name', 'Class Group', 'Date', 'Group Hour', 'Location',
-                         'Counselor', 'Counselor Credentials', 'Attendee Name', 'ID', 'Group',
-                         'Engagement', 'Time In', 'Time Out', 'Comments'])
-        for record in report_records:
-            writer.writerow([
-                record[0], record[1], record[2], record[3], record[4],
-                record[5], record[6] or '', record[7], record[8], record[9] or '',
-                record[10], record[11], record[12] or 'Not set', record[13] or ''
-            ])
-        conn.close()
-        return Response(
-            output.getvalue(),
-            mimetype='text/csv',
-            headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
-        )
+        try:
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Class Name', 'Class Group', 'Date', 'Group Hour', 'Location',
+                             'Counselor', 'Counselor Credentials', 'Attendee Name', 'ID', 'Group',
+                             'Engagement', 'Time In', 'Time Out', 'Comments'])
+            if not report_records:
+                logger.warning("No records to include in CSV download")
+                flash('No classes found to download as CSV', 'info')
+                conn.close()
+                return redirect(url_for('reports'))
+            for record in report_records:
+                writer.writerow([
+                    record[0], record[1], record[2], record[3], record[4],
+                    record[5], record[6] or '', record[7] or 'No attendees', record[8] or '',
+                    record[9] or '', record[10] or '', record[11] or '', record[12] or '', record[13] or ''
+                ])
+            csv_content = output.getvalue()
+            output.close()
+            logger.info("CSV file generated successfully")
+            conn.close()
+            return Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
+            )
+        except Exception as e:
+            logger.error(f"Error generating CSV: {e}")
+            flash('An error occurred while generating the CSV file', 'error')
+            conn.close()
+            return redirect(url_for('reports'))
     
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, 

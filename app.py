@@ -496,7 +496,6 @@ def manage_users():
         elif action == 'delete_counselor':
             counselor_id = request.form['counselor_id']
             try:
-                # Delete dependent classes first
                 c.execute("DELETE FROM classes WHERE counselor_id = %s", (counselor_id,))
                 c.execute("DELETE FROM users WHERE id = %s AND role = 'counselor'", (counselor_id,))
                 conn.commit()
@@ -517,7 +516,6 @@ def manage_users():
                     if admin_count <= 1:
                         flash('Cannot delete the last admin account')
                     else:
-                        # Delete dependent classes first
                         c.execute("DELETE FROM classes WHERE counselor_id = %s", (admin_id,))
                         c.execute("DELETE FROM users WHERE id = %s AND role = 'admin'", (admin_id,))
                         conn.commit()
@@ -557,11 +555,6 @@ def manage_classes():
                           (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
                 new_class_id = c.fetchone()[0]
                 conn.commit()
-                attendee_ids = request.form.getlist('attendee_ids')
-                for attendee_id in attendee_ids:
-                    c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (new_class_id, attendee_id))
-                conn.commit()
                 flash('Class added successfully')
                 if recurring and frequency == 'weekly':
                     start = datetime.strptime(date, '%Y-%m-%d')
@@ -575,9 +568,6 @@ def manage_classes():
                             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                                       (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
                             new_instance_id = c.fetchone()[0]
-                            for attendee_id in attendee_ids:
-                                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                                          (new_instance_id, attendee_id))
                         current_date += timedelta(days=7)
                     conn.commit()
             except psycopg2.IntegrityError:
@@ -610,7 +600,6 @@ def manage_classes():
         elif action == 'delete':
             class_id = request.form['class_id']
             try:
-                # Delete dependent records first
                 c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
                 c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
                 c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
@@ -637,7 +626,11 @@ def manage_classes():
             flash('Attendee unassigned successfully')
     c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
     counselors = c.fetchall()
-    c.execute("SELECT id, group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency FROM classes")
+    c.execute("""
+        SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name
+        FROM classes c
+        LEFT JOIN users u ON c.counselor_id = u.id
+    """)
     classes = c.fetchall()
     c.execute("SELECT id, full_name, attendee_id FROM attendees")
     attendees = c.fetchall()
@@ -687,7 +680,6 @@ def manage_attendees():
         elif action == 'delete':
             attendee_id = request.form['attendee_id']
             try:
-                # Delete dependent records first
                 c.execute("DELETE FROM class_attendees WHERE attendee_id = %s", (attendee_id,))
                 c.execute("DELETE FROM attendance WHERE attendee_id = %s", (attendee_id,))
                 c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))

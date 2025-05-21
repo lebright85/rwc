@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h2 class="text-2xl font-bold mb-4">Manage Users</h2>
+    
+    <!-- Add Counselor Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-semibold mb-4">Add New Counselor</h3>
+        <form method="POST" action="{{ url_for('manage_users') }}">
+            <input type="hidden" name="action" value="add_counselor">
+            <div class="mb-4">
+                <label for="username_counselor" class="block text-gray-700">Username</label>
+                <input type="text" name="username" id="username_counselor" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="password_counselor" class="block text-gray-700">Password</label>
+                <input type="password" name="password" id="password_counselor" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="full_name_counselor" class="block text-gray-700">Full Name</label>
+                <input type="text" name="full_name" id="full_name_counselor" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="credentials_counselor" class="block text-gray-700">Credentials</label>
+                <input type="text" name="credentials" id="credentials_counselor" class="w-full p-2 border rounded">
+            </div>
+            <div class="mb-4">
+                <label for="email_counselor" class="block text-gray-700">Email</label>
+                <input type="email" name="email" id="email_counselor" class="w-full p-2 border rounded">
+            </div>
+            <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Add Counselor</button>
+        </form>
+    </div>
+    
+    <!-- Add Admin Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-semibold mb-4">Add New Admin</h3>
+        <form method="POST" action="{{ url_for('manage_users') }}">
+            <input type="hidden" name="action" value="add_admin">
+            <div class="mb-4">
+                <label for="username_admin" class="block text-gray-700">Username</label>
+                <input type="text" name="username" id="username_admin" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="password_admin" class="block text-gray-700">Password</label>
+                <input type="password" name="password" id="password_admin" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="full_name_admin" class="block text-gray-700">Full Name</label>
+                <input type="text" name="full_name" id="full_name_admin" class="w-full p-2 border rounded" required>
+            </div>
+            <div class="mb-4">
+                <label for="credentials_admin" class="block text-gray-700">Credentials</label>
+                <input type="text" name="credentials" id="credentials_admin" class="w-full p-2 border rounded">
+            </div>
+            <div class="mb-4">
+                <label for="email_admin" class="block text-gray-700">Email</label>
+                <input type="email" name="email" id="email_admin" class="w-full p-2 border rounded">
+            </div>
+            <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Add Admin</button>
+        </form>
+    </div>
+    
+    <!-- User List -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-lg font-semibold mb-4">User List</h3>
+        {% if users %}
+            <table class="w-full table-auto">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="px-4 py-2">Username</th>
+                        <th class="px-4 py-2">Full Name</th>
+                        <th class="px-4 py-2">Role</th>
+                        <th class="px-4 py-2">Credentials</th>
+                        <th class="px-4 py-2">Email</th>
+                        <th class="px-4 py-2">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                        <tr>
+                            <td class="border px-4 py-2">{{ user[1] }}</td>
+                            <td class="border px-4 py-2">{{ user[2] }}</td>
+                            <td class="border px-4 py-2">{{ user[3] }}</td>
+                            <td class="border px-4 py-2">{{ user[4] or 'Not specified' }}</td>
+                            <td class="border px-4 py-2">{{ user[5] or '' }}</td>
+                            <td class="border px-4 py-2">
+                                <button onclick="openModal('editUserModal{{ user[0] }}')" class="bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700 mr-2">Edit</button>
+                                {% if user[0] != current_user_id %}
+                                    <form method="POST" action="{{ url_for('manage_users') }}" class="inline" onsubmit="return confirm('Are you sure you want to delete this {{ user[3] }}?');">
+                                        <input type="hidden" name="action" value="delete_{{ user[3] }}">
+                                        {% if user[3] == 'counselor' %}
+                                            <input type="hidden" name="counselor_id" value="{{ user[0] }}">
+                                        {% else %}
+                                            <input type="hidden" name="admin_id" value="{{ user[0] }}">
+                                        {% endif %}
+                                        <button type="submit" class="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">Delete</button>
+                                    </form>
+                                {% else %}
+                                    <span class="text-gray-500">Cannot delete self</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <!-- Edit Modals -->
+            {% for user in users %}
+                <div id="editUserModal{{ user[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+                        <h3 class="text-lg font-semibold mb-4">Edit {{ user[3] | capitalize }}</h3>
+                        <form method="POST" action="{{ url_for('manage_users') }}">
+                            <input type="hidden" name="action" value="edit_{{ user[3] }}">
+                            {% if user[3] == 'counselor' %}
+                                <input type="hidden" name="counselor_id" value="{{ user[0] }}">
+                            {% else %}
+                                <input type="hidden" name="admin_id" value="{{ user[0] }}">
+                            {% endif %}
+                            <div class="mb-4">
+                                <label for="username{{ user[0] }}" class="block text-gray-700">Username</label>
+                                <input type="text" name="username" id="username{{ user[0] }}" value="{{ user[1] }}" class="w-full p-2 border rounded" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="password{{ user[0] }}" class="block text-gray-700">New Password (leave blank to keep current)</label>
+                                <input type="password" name="password" id="password{{ user[0] }}" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label for="full_name{{ user[0] }}" class="block text-gray-700">Full Name</label>
+                                <input type="text" name="full_name" id="full_name{{ user[0] }}" value="{{ user[2] }}" class="w-full p-2 border rounded" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="credentials{{ user[0] }}" class="block text-gray-700">Credentials</label>
+                                <input type="text" name="credentials" id="credentials{{ user[0] }}" value="{{ user[4] or '' }}" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label for="email{{ user[0] }}" class="block text-gray-700">Email</label>
+                                <input type="email" name="email" id="email{{ user[0] }}" value="{{ user[5] or '' }}" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="flex justify-end space-x-2">
+                                <button type="button" onclick="closeModal('editUserModal{{ user[0] }}')" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Cancel</button>
+                                <button type="submit" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-gray-700">No users found.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function openModal(modalId) {
+    document.getElementById(modalId).classList.remove('hidden');
+}
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h2 class="text-2xl font-bold mb-4">Attendee Profile: {{ attendee[1] }}</h2>
+    <a href="{{ url_for('manage_attendees') }}" class="text-blue-600 hover:text-blue-800 mb-6 inline-block">&larr; Back to Manage Attendees</a>
+    
+    <!-- Attendee Details -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-semibold mb-4">Attendee Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <p class="text-gray-700"><span class="font-semibold">Full Name:</span> {{ attendee[1] }}</p>
+                <p class="text-gray-700"><span class="font-semibold">Attendee ID:</span> {{ attendee[2] }}</p>
+                <p class="text-gray-700"><span class="font-semibold">Group:</span> {{ attendee[3] or 'Not set' }}</p>
+            </div>
+            <div>
+                <p class="text-gray-700"><span class="font-semibold">Group Details:</span> {{ attendee[4] or 'Not set' }}</p>
+                <p class="text-gray-700"><span class="font-semibold">Notes:</span> {{ attendee[5] or 'Not set' }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Assigned Classes -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-semibold mb-4">Assigned Classes</h3>
+        {% if assigned_classes %}
+            <div class="space-y-4">
+                {% for class in assigned_classes %}
+                    <div class="border-b py-4 last:border-b-0">
+                        <h4 class="text-lg font-medium">{{ class[2] }} ({{ class[1] }})</h4>
+                        <p class="text-gray-600">Date: {{ class[3] }} | Hours: {{ class[4] }} | Location: {{ class[5] }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-gray-700">No classes assigned to this attendee.</p>
+        {% endif %}
+    </div>
+    
+    <!-- Attendance History -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-lg font-semibold mb-4">Attendance History</h3>
+        {% if attendance_records %}
+            <table class="w-full table-auto">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="px-4 py-2">Class Name</th>
+                        <th class="px-4 py-2">Time In</th>
+                        <th class="px-4 py-2">Time Out</th>
+                        <th class="px-4 py-2">Engagement</th>
+                        <th class="px-4 py-2">Comments</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in attendance_records %}
+                        <tr>
+                            <td class="border px-4 py-2">{{ record[0] }}</td>
+                            <td class="border px-4 py-2">{{ record[1] }}</td>
+                            <td class="border px-4 py-2">{{ record[2] or 'Not set' }}</td>
+                            <td class="border px-4 py-2">{{ record[3] }}</td>
+                            <td class="border px-4 py-2">{{ record[4] or '' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-gray-700">No attendance records for this attendee.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

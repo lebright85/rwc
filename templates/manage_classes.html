@@ -67,7 +67,7 @@
                         <div>
                             <h4 class="text-lg font-medium">{{ class[2] }} ({{ class[1] }})</h4>
                             <p class="text-gray-600">Date: {{ class[3] }} | Hours: {{ class[4] }} | Location: {{ class[8] }}</p>
-                            <p class="text-gray-600">Counselor ID: {{ class[5] }} | Type: {{ class[6] }} | Notes: {{ class[7] }}</p>
+                            <p class="text-gray-600">Counselor: {{ class[11] or 'None' }} | Type: {{ class[6] }} | Notes: {{ class[7] }}</p>
                             <p class="text-gray-600">Recurring: {{ 'Yes' if class[9] else 'No' }} {% if class[9] %} | Frequency: {{ class[10] }}{% endif %}</p>
                             <p class="text-gray-600">Assigned Attendees: 
                                 {% if class_attendees[class[0]] %}

@@ -53,14 +53,6 @@
                     <option value="weekly">Weekly</option>
                 </select>
             </div>
-            <div class="mb-4">
-                <label for="attendee_ids" class="block text-gray-700">Assign Attendees</label>
-                <select name="attendee_ids" id="attendee_ids" multiple class="w-full p-2 border rounded">
-                    {% for attendee in attendees %}
-                        <option value="{{ attendee[0] }}">{{ attendee[1] }}</option>
-                    {% endfor %}
-                </select>
-            </div>
             <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Add Class</button>
         </form>
     </div>

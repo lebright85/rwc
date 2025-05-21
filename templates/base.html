@@ -21,7 +21,7 @@
                         <a href="{{ url_for('manage_attendees') }}" class="mr-4 hover:underline">Manage Attendees</a>
                         <a href="{{ url_for('reports') }}" class="mr-4 hover:underline">Reports</a>
                     {% elif current_user.role == 'counselor' %}
-                        <a href="{{ url_for('counselor_dashboard') }}" class="mr-4 hover:underline">Dashboard</a>
+                        <a href="{{ 'counselor_dashboard'|safe_url_for }}" class="mr-4 hover:underline">Dashboard</a>
                     {% endif %}
                     <a href="{{ url_for('logout') }}" class="hover:underline">Logout</a>
                 {% else %}

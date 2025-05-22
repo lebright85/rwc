@@ -783,46 +783,112 @@ def class_attendance(class_id):
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    # Fetch class details
-    c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
-              (class_id, current_user.id))
-    class_info = c.fetchone()
-    if not class_info:
-        flash('Class not found or you are not authorized')
+    try:
+        # Fetch class details
+        c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
+                  (class_id, current_user.id))
+        class_info = c.fetchone()
+        if not class_info:
+            logger.warning(f"Class {class_id} not found or not authorized for counselor_id: {current_user.id}")
+            flash('Class not found or you are not authorized')
+            conn.close()
+            return redirect(url_for('counselor_dashboard'))
+
+        # Fetch attendees assigned to the class
+        c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
+                  (class_id,))
+        attendees = c.fetchall()
+        logger.info(f"Retrieved {len(attendees)} attendees for class_id: {class_id}")
+
+        # Fetch existing attendance records
+        c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
+                  (class_id,))
+        attendance_records = c.fetchall()
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'record_attendance':
+                attendee_id = request.form.get('attendee_id')
+                time_in = request.form.get('time_in')
+                time_out = request.form.get('time_out', None)  # Optional
+                engagement = request.form.get('engagement', '')
+                comments = request.form.get('comments', '')
+                
+                # Validate inputs
+                if not attendee_id or not time_in:
+                    logger.warning(f"Missing required fields for attendance: attendee_id={attendee_id}, time_in={time_in}")
+                    flash('Please provide attendee and time in')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+                
+                # Verify attendee_id is valid for this class
+                c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
+                if not c.fetchone():
+                    logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
+                    flash('Selected attendee is not assigned to this class')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+                
+                # Prevent duplicate attendance records
+                c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
+                if c.fetchone():
+                    logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
+                    flash('Attendance already recorded for this attendee in this class')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+
+                try:
+                    c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
+                              (class_id, attendee_id, time_in, time_out, engagement, comments))
+                    conn.commit()
+                    logger.info(f"Attendance recorded for class_id {class_id}, attendee_id {attendee_id}")
+                    flash('Attendance recorded successfully')
+                except psycopg2.IntegrityError as e:
+                    logger.error(f"IntegrityError recording attendance for class_id {class_id}, attendee_id {attendee_id}: {e}")
+                    flash('Error recording attendance: Invalid data or duplicate entry')
+                except psycopg2.Error as e:
+                    logger.error(f"Database error recording attendance for class_id {class_id}, attendee_id {attendee_id}: {e}")
+                    flash('An error occurred while recording attendance')
+
+            elif action == 'update_timeout':
+                attendance_id = request.form.get('attendance_id')
+                time_out = request.form.get('time_out')
+                
+                # Validate inputs
+                if not attendance_id or not time_out:
+                    logger.warning(f"Missing required fields for update_timeout: attendance_id={attendance_id}, time_out={time_out}")
+                    flash('Please provide attendance ID and time out')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+                
+                # Verify attendance record exists and belongs to this class
+                c.execute("SELECT 1 FROM attendance WHERE id = %s AND class_id = %s", (attendance_id, class_id))
+                if not c.fetchone():
+                    logger.warning(f"Invalid attendance_id {attendance_id} for class_id {class_id}")
+                    flash('Invalid attendance record')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+
+                try:
+                    c.execute("UPDATE attendance SET time_out = %s WHERE id = %s AND class_id = %s",
+                              (time_out, attendance_id, class_id))
+                    conn.commit()
+                    logger.info(f"Time out updated for attendance_id {attendance_id}, class_id {class_id}")
+                    flash('Time out updated successfully')
+                except psycopg2.Error as e:
+                    logger.error(f"Database error updating time out for attendance_id {attendance_id}: {e}")
+                    flash('An error occurred while updating time out')
+
+        conn.close()
+        if not attendees:
+            flash('No attendees assigned to this class. Please assign attendees first.')
+        return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+    
+    except psycopg2.Error as e:
+        logger.error(f"Database error in class_attendance for class_id {class_id}: {e}")
+        flash('Error loading attendance page. Please try again later.')
         conn.close()
         return redirect(url_for('counselor_dashboard'))
-    
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'record_attendance':
-            attendee_id = request.form['attendee_id']
-            time_in = request.form['time_in']
-            time_out = request.form['time_out']
-            engagement = request.form['engagement']
-            comments = request.form['comments']
-            try:
-                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                          (class_id, attendee_id, time_in, time_out, engagement, comments))
-                conn.commit()
-                flash('Attendance recorded successfully')
-            except psycopg2.IntegrityError:
-                flash('Error recording attendance: Duplicate or invalid data')
-            except psycopg2.Error as e:
-                logger.error(f"Error recording attendance: {e}")
-                flash('An error occurred while recording attendance')
-    
-    # Fetch attendees assigned to the class
-    c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
-              (class_id,))
-    attendees = c.fetchall()
-    
-    # Fetch existing attendance records for the class
-    c.execute("SELECT a.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
-              (class_id,))
-    attendance_records = c.fetchall()
-    
-    conn.close()
-    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+    except Exception as e:
+        logger.error(f"Unexpected error in class_attendance for class_id {class_id}: {e}")
+        flash('An unexpected error occurred. Please try again later.')
+        conn.close()
+        return redirect(url_for('counselor_dashboard'))
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

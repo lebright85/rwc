@@ -207,7 +207,11 @@ def generate_recurring_classes():
     recurring_classes = c.fetchall()
     for cls in recurring_classes:
         class_id, group_name, class_name, start_date, group_hours, counselor_id, group_type, notes, location, frequency = cls
-        start = datetime.strptime(start_date, '%Y-%m-%d')
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            logger.error(f"Invalid date format for class {class_id}: {start_date}")
+            continue
         if frequency == 'weekly':
             delta = timedelta(days=7)
         else:
@@ -218,14 +222,17 @@ def generate_recurring_classes():
             c.execute("SELECT id FROM classes WHERE class_name = %s AND date = %s AND counselor_id = %s",
                       (class_name, new_date, counselor_id))
             if not c.fetchone():
-                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                          (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
-                new_class_id = c.fetchone()[0]
-                c.execute("SELECT attendee_id FROM class_attendees WHERE class_id = %s", (class_id,))
-                attendees = c.fetchall()
-                for attendee in attendees:
-                    c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (new_class_id, attendee[0]))
+                try:
+                    c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                              (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
+                    new_class_id = c.fetchone()[0]
+                    c.execute("SELECT attendee_id FROM class_attendees WHERE class_id = %s", (class_id,))
+                    attendees = c.fetchall()
+                    for attendee in attendees:
+                        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                  (new_class_id, attendee[0]))
+                except psycopg2.Error as e:
+                    logger.error(f"Error generating recurring class for {class_name} on {new_date}: {e}")
             current_date += delta
     conn.commit()
     conn.close()
@@ -731,25 +738,91 @@ def counselor_dashboard():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT full_name, credentials FROM users WHERE id = %s AND role = 'counselor'",
-              (current_user.id,))
-    counselor = c.fetchone()
-    if not counselor:
-        flash('Counselor not found')
+    try:
+        c.execute("SELECT full_name, credentials FROM users WHERE id = %s AND role = 'counselor'",
+                  (current_user.id,))
+        counselor = c.fetchone()
+        if not counselor:
+            logger.warning(f"Counselor not found for user_id: {current_user.id}")
+            flash('Counselor not found')
+            return redirect(url_for('login'))
+        counselor_name, counselor_credentials = counselor
+        today = datetime.today()
+        today_str = today.strftime('%Y-%m-%d')
+        week_later = (today + timedelta(days=7)).strftime('%Y-%m-%d')
+        logger.info(f"Fetching classes for counselor_id: {current_user.id}, date: {today_str}")
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date = %s",
+                  (current_user.id, today_str))
+        today_classes = c.fetchall()
+        logger.info(f"Retrieved {len(today_classes)} classes for today: {[cls[2] for cls in today_classes]}")
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
+                  (current_user.id, (today + timedelta(days=1)).strftime('%Y-%m-%d'), week_later))
+        upcoming_classes = c.fetchall()
+        # Validate class data
+        for cls in today_classes + upcoming_classes:
+            if None in cls:
+                logger.warning(f"Invalid class data: {cls}")
+        conn.close()
+        return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes,
+                               today=today_str, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
+    except psycopg2.Error as e:
+        logger.error(f"Database error in counselor_dashboard for user_id: {current_user.id}: {e}")
+        flash('Error loading dashboard. Please try again later.')
+        conn.close()
         return redirect(url_for('login'))
-    counselor_name, counselor_credentials = counselor
-    today = datetime.today()
-    today_str = today.strftime('%Y-%m-%d')
-    week_later = (today + timedelta(days=7)).strftime('%Y-%m-%d')
-    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date = %s",
-              (current_user.id, today_str))
-    today_classes = c.fetchall()
-    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
-              (current_user.id, (today + timedelta(days=1)).strftime('%Y-%m-%d'), week_later))
-    upcoming_classes = c.fetchall()
+    except Exception as e:
+        logger.error(f"Unexpected error in counselor_dashboard for user_id: {current_user.id}: {e}")
+        flash('An unexpected error occurred. Please try again later.')
+        conn.close()
+        return redirect(url_for('login'))
+
+@app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
+@login_required
+def class_attendance(class_id):
+    if current_user.role != 'counselor':
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    # Fetch class details
+    c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
+              (class_id, current_user.id))
+    class_info = c.fetchone()
+    if not class_info:
+        flash('Class not found or you are not authorized')
+        conn.close()
+        return redirect(url_for('counselor_dashboard'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'record_attendance':
+            attendee_id = request.form['attendee_id']
+            time_in = request.form['time_in']
+            time_out = request.form['time_out']
+            engagement = request.form['engagement']
+            comments = request.form['comments']
+            try:
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
+                          (class_id, attendee_id, time_in, time_out, engagement, comments))
+                conn.commit()
+                flash('Attendance recorded successfully')
+            except psycopg2.IntegrityError:
+                flash('Error recording attendance: Duplicate or invalid data')
+            except psycopg2.Error as e:
+                logger.error(f"Error recording attendance: {e}")
+                flash('An error occurred while recording attendance')
+    
+    # Fetch attendees assigned to the class
+    c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
+              (class_id,))
+    attendees = c.fetchall()
+    
+    # Fetch existing attendance records for the class
+    c.execute("SELECT a.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
+              (class_id,))
+    attendance_records = c.fetchall()
+    
     conn.close()
-    return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes,
-                           today=today_str, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
+    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

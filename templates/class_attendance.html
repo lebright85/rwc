@@ -24,8 +24,8 @@
                 <input type="time" name="time_in" class="w-full border rounded p-2" required>
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium">Time Out</label>
-                <input type="time" name="time_out" class="w-full border rounded p-2" required>
+                <label class="block text-sm font-medium">Time Out (Optional)</label>
+                <input type="time" name="time_out" class="w-full border rounded p-2" placeholder="Optional">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium">Engagement</label>
@@ -63,7 +63,7 @@
                 <tr>
                     <td class="border p-2">{{ record[1] }}</td>
                     <td class="border p-2">{{ record[2] }}</td>
-                    <td class="border p-2">{{ record[3] }}</td>
+                    <td class="border p-2">{{ record[3] or 'Not recorded' }}</td>
                     <td class="border p-2">{{ record[4] }}</td>
                     <td class="border p-2">{{ record[5] }}</td>
                 </tr>

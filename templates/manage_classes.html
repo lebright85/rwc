@@ -63,55 +63,42 @@
         </form>
     </div>
 
-    <!-- Classes Table -->
+    <!-- Classes List -->
     <div class="bg-white p-6 rounded-lg shadow-md">
         <h2 class="text-lg font-bold mb-4">Classes</h2>
-        <table class="w-full border-collapse">
-            <thead>
-                <tr class="bg-gray-200">
-                    <th class="border p-2">Group Name</th>
-                    <th class="border p-2">Class Name</th>
-                    <th class="border p-2">Date</th>
-                    <th class="border p-2">Hours</th>
-                    <th class="border p-2">Counselor</th>
-                    <th class="border p-2">Location</th>
-                    <th class="border p-2">Attendees</th>
-                    <th class="border p-2">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for class in classes %}
-                <tr>
-                    <td class="border p-2">{{ class[1] }}</td>
-                    <td class="border p-2">{{ class[2] }}</td>
-                    <td class="border p-2">{{ class[3] }}</td>
-                    <td class="border p-2">{{ class[4] }}</td>
-                    <td class="border p-2">{{ class[11] }}</td>
-                    <td class="border p-2">{{ class[8] }}</td>
-                    <td class="border p-2">
-                        {% if class_attendees[class[0]] %}
-                        <ul>
-                            {% for attendee in class_attendees[class[0]] %}
-                            <li>{{ attendee[1] }} ({{ attendee[2] }})</li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        No attendees
-                        {% endif %}
-                    </td>
-                    <td class="border p-2">
-                        <button onclick="openModal('editClassModal{{ class[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
-                        <form method="POST" class="inline">
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="class_id" value="{{ class[0] }}">
-                            <button type="submit" class="bg-red-600 text-white p-1 rounded" onclick="return confirm('Are you sure you want to delete this class?')">Delete</button>
-                        </form>
-                        <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mt-2">Assign Attendee</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% if classes %}
+        {% for class in classes %}
+        <div class="border-b py-4 last:border-b-0">
+            <h3 class="text-md font-bold">
+                Class: {{ class[2] }} ({{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[8] }})
+            </h3>
+            <p class="text-sm mt-1">Counselor: {{ class[11] }}</p>
+            <div class="text-sm mt-1">
+                <span class="font-medium">Assigned Attendees:</span>
+                {% if class_attendees[class[0]] %}
+                <ul class="list-disc pl-5">
+                    {% for attendee in class_attendees[class[0]] %}
+                    <li>{{ attendee[1] }} ({{ attendee[2] }})</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                None
+                {% endif %}
+            </div>
+            <div class="mt-2 flex space-x-2">
+                <button onclick="openModal('editClassModal{{ class[0] }}')" class="bg-blue-600 text-white p-1 rounded">Edit</button>
+                <form method="POST" class="inline">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <button type="submit" class="bg-red-600 text-white p-1 rounded" onclick="return confirm('Are you sure you want to delete this class?')">Delete</button>
+                </form>
+                <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded">Assign Attendee</button>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p>No classes found.</p>
+        {% endif %}
     </div>
 
     <!-- Edit Modals -->

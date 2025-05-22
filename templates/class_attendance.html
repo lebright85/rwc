@@ -24,8 +24,8 @@
                 <input type="time" name="time_in" class="w-full border rounded p-2" required>
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium">Time Out</label>
-                <input type="time" name="time_out" class="w-full border rounded p-2" required>
+                <label class="block text-sm font-medium">Time Out (Optional)</label>
+                <input type="time" name="time_out" class="w-full border rounded p-2">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium">Engagement</label>
@@ -53,19 +53,28 @@
                 <tr class="bg-gray-200">
                     <th class="border p-2">Attendee</th>
                     <th class="border p-2">Time In</th>
+                    <th class="border p-2">Time Out</th>
                     <th class="border p-2">Engagement</th>
                     <th class="border p-2">Comments</th>
-                    <th class="border p-2">Time Out</th>
+                    <th class="border p-2">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in attendance_records %}
                 <tr>
-                    <td class="border p-2">{{ record[1] }}</td> <!-- full_name -->
-                    <td class="border p-2">{{ record[2] }}</td> <!-- time_in -->
-                    <td class="border p-2">{{ record[4] }}</td> <!-- engagement -->
-                    <td class="border p-2">{{ record[5] }}</td> <!-- comments -->
-                    <td class="border p-2">{{ record[3] }}</td> <!-- time_out -->
+                    <td class="border p-2">{{ record[1] }}</td>
+                    <td class="border p-2">{{ record[2] }}</td>
+                    <td class="border p-2">{{ record[3] or 'Not set' }}</td>
+                    <td class="border p-2">{{ record[4] }}</td>
+                    <td class="border p-2">{{ record[5] }}</td>
+                    <td class="border p-2">
+                        <form method="POST" class="inline">
+                            <input type="hidden" name="action" value="update_timeout">
+                            <input type="hidden" name="attendance_id" value="{{ record[0] }}">
+                            <input type="time" name="time_out" class="border rounded p-1 mr-2" required>
+                            <button type="submit" class="bg-blue-600 text-white p-1 rounded">Update Time Out</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

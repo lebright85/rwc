@@ -155,15 +155,21 @@ def init_db():
             c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                       ('John Smith', 'ATT001', 'Group A', 'Morning Session', 'Requires extra support'))
             attendee_id = c.fetchone()[0]
-            logger.info("Sample attendee inserted")
+            c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                      ('Jane Doe', 'ATT002', 'Group A', 'Morning Session', 'Good engagement'))
+            attendee_id2 = c.fetchone()[0]
+            logger.info("Sample attendees inserted")
 
             c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
                       (mindfulness_id, attendee_id, '10:00', '11:30', 'Yes', 'Actively participated'))
+            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
+                      (mindfulness_id, attendee_id2, '10:00', '11:30', 'Yes', 'Good engagement'))
             c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
                       (yoga_id, attendee_id, '13:00', '14:00', 'Yes', 'Good participation'))
             logger.info("Sample attendance inserted")
 
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (mindfulness_id, attendee_id))
+            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (mindfulness_id, attendee_id2))
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (yoga_id, attendee_id))
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (stress_id, attendee_id))
             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (coping_id, attendee_id))
@@ -356,16 +362,12 @@ def reports():
     # Log filter values
     logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, action={action}")
     
-    # Build dynamic query
-    query = """
-        SELECT c.class_name, c.group_name, c.date, c.group_hours, c.location,
-               u.full_name AS counselor_name, u.credentials AS counselor_credentials,
-               att.full_name AS attendee_name, att.attendee_id, att."group",
-               a.engagement, a.time_in, a.time_out, a.comments
+    # Build class query
+    class_query = """
+        SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
+               u.full_name AS counselor_name, u.credentials AS counselor_credentials
         FROM classes c
         JOIN users u ON c.counselor_id = u.id
-        LEFT JOIN attendance a ON a.class_id = c.id
-        LEFT JOIN attendees att ON a.attendee_id = att.id
         WHERE 1=1
     """
     params = []
@@ -377,7 +379,7 @@ def reports():
                 start_dt = datetime.strptime(start_date, '%Y-%m-%d')
                 end_dt = datetime.strptime(end_date, '%Y-%m-%d')
                 if start_dt <= end_dt:
-                    query += " AND c.date >= %s AND c.date <= %s"
+                    class_query += " AND c.date >= %s AND c.date <= %s"
                     params.extend([start_date, end_date])
                 else:
                     flash('Start date must be before end date', 'error')
@@ -392,60 +394,93 @@ def reports():
 
         # Apply other filters
         if class_id and class_id != 'all':
-            query += " AND c.id = %s"
+            class_query += " AND c.id = %s"
             params.append(int(class_id))
-        if attendee_id and attendee_id != 'all':
-            query += " AND a.attendee_id = %s"
-            params.append(int(attendee_id))
         if counselor_id and counselor_id != 'all':
-            query += " AND c.counselor_id = %s"
+            class_query += " AND c.counselor_id = %s"
             params.append(int(counselor_id))
         
-        c.execute(query, params)
-        report_records = c.fetchall()
-        logger.info(f"Report query executed with {len(report_records)} records returned for classes: {[r[0] for r in report_records]}")
-        if not report_records and action == 'generate':
+        # Fetch classes
+        c.execute(class_query, params)
+        class_records = c.fetchall()
+        logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
+
+        # Group attendance by class
+        report_data = []
+        for class_record in class_records:
+            class_id = class_record[0]
+            # Fetch attendees for this class
+            attendee_query = """
+                SELECT att.full_name, att.attendee_id, att."group",
+                       a.engagement, a.time_in, a.time_out, a.comments
+                FROM attendance a
+                JOIN attendees att ON a.attendee_id = att.id
+                WHERE a.class_id = %s
+            """
+            attendee_params = [class_id]
+            if attendee_id and attendee_id != 'all':
+                attendee_query += " AND a.attendee_id = %s"
+                attendee_params.append(int(attendee_id))
+            
+            c.execute(attendee_query, attendee_params)
+            attendee_records = c.fetchall()
+            logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")
+            report_data.append({
+                'class': class_record,
+                'attendees': attendee_records
+            })
+        
+        if not report_data and action == 'generate':
             flash('No classes found for the selected filters', 'info')
-    except (psycopg2.Error, ValueError) as e:
-        logger.error(f"Error executing report query: {e}")
-        report_records = []
-    
-    if action == 'download_csv':
-        try:
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerow(['Class Name', 'Class Group', 'Date', 'Group Hour', 'Location',
-                             'Counselor', 'Counselor Credentials', 'Attendee Name', 'ID', 'Group',
-                             'Engagement', 'Time In', 'Time Out', 'Comments'])
-            if not report_records:
-                logger.warning("No records to include in CSV download")
-                flash('No classes found to download as CSV', 'info')
+        
+        if action == 'download_csv':
+            try:
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
+                                 'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
+                                 'Attendee Group', 'Engagement', 'Time In', 'Time Out', 'Comments'])
+                for data in report_data:
+                    class_record = data['class']
+                    class_info = [
+                        class_record[1], class_record[2], class_record[3], class_record[4],
+                        class_record[5], class_record[6], class_record[7] or ''
+                    ]
+                    if not data['attendees']:
+                        writer.writerow(class_info + ['No attendees', '', '', '', '', '', ''])
+                    else:
+                        for idx, attendee in enumerate(data['attendees']):
+                            row = class_info if idx == 0 else ['', '', '', '', '', '', '']
+                            row += [
+                                attendee[0] or 'No attendees', attendee[1] or '',
+                                attendee[2] or '', attendee[3] or '', attendee[4] or '',
+                                attendee[5] or '', attendee[6] or ''
+                            ]
+                            writer.writerow(row)
+                csv_content = output.getvalue()
+                output.close()
+                logger.info("CSV file generated successfully")
+                conn.close()
+                return Response(
+                    csv_content,
+                    mimetype='text/csv',
+                    headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
+                )
+            except Exception as e:
+                logger.error(f"Error generating CSV: {e}")
+                flash('An error occurred while generating the CSV file', 'error')
                 conn.close()
                 return redirect(url_for('reports'))
-            for record in report_records:
-                writer.writerow([
-                    record[0], record[1], record[2], record[3], record[4],
-                    record[5], record[6] or '', record[7] or 'No attendees', record[8] or '',
-                    record[9] or '', record[10] or '', record[11] or '', record[12] or '', record[13] or ''
-                ])
-            csv_content = output.getvalue()
-            output.close()
-            logger.info("CSV file generated successfully")
-            conn.close()
-            return Response(
-                csv_content,
-                mimetype='text/csv',
-                headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
-            )
-        except Exception as e:
-            logger.error(f"Error generating CSV: {e}")
-            flash('An error occurred while generating the CSV file', 'error')
-            conn.close()
-            return redirect(url_for('reports'))
+    
+    except (psycopg2.Error, ValueError) as e:
+        logger.error(f"Error executing report query: {e}")
+        report_data = []
+        if action == 'generate':
+            flash('Error generating report. Please try again.', 'error')
     
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, 
-                           report_records=report_records, start_date=start_date, end_date=end_date, 
+                           report_data=report_data, start_date=start_date, end_date=end_date, 
                            class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id)
 
 @app.route('/manage_users', methods=['GET', 'POST'])

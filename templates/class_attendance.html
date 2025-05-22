@@ -1,74 +1,82 @@
 {% extends 'base.html' %}
-
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h2 class="text-2xl font-bold mb-4">Manage Attendance for {{ class_info[2] }}</h2>
-    <p class="text-gray-700 mb-4">Group: {{ class_info[1] }} | Date: {{ class_info[3] }} | Hours: {{ class_info[4] }}</p>
-    
+    <h1 class="text-2xl font-bold mb-6">Class Attendance: {{ class_info[1] }}</h1>
+    <p class="mb-4">Date: {{ class_info[2] }} | Time: {{ class_info[3] }} | Location: {{ class_info[4] }}</p>
+
     <!-- Record Attendance Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h3 class="text-lg font-semibold mb-4">Record Attendance</h3>
-        <form method="POST" action="{{ url_for('class_attendance', class_id=class_info[0]) }}">
+        <h2 class="text-lg font-bold mb-4">Record Attendance</h2>
+        {% if attendees %}
+        <form method="POST">
+            <input type="hidden" name="action" value="record_attendance">
             <div class="mb-4">
-                <label for="attendee_id" class="block text-gray-700">Select Attendee</label>
-                <select name="attendee_id" id="attendee_id" class="w-full p-2 border rounded" required>
+                <label class="block text-sm font-medium">Attendee</label>
+                <select name="attendee_id" class="w-full border rounded p-2" required>
+                    <option value="">Select an attendee</option>
                     {% for attendee in attendees %}
-                        <option value="{{ attendee[0] }}">{{ attendee[1] }} ({{ attendee[2] }})</option>
+                    <option value="{{ attendee[0] }}">{{ attendee[1] }} ({{ attendee[2] }})</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="mb-4">
-                <label for="time_in" class="block text-gray-700">Time In</label>
-                <input type="time" name="time_in" id="time_in" class="w-full p-2 border rounded" required>
+                <label class="block text-sm font-medium">Time In</label>
+                <input type="time" name="time_in" class="w-full border rounded p-2" required>
             </div>
             <div class="mb-4">
-                <label for="time_out" class="block text-gray-700">Time Out (optional)</label>
-                <input type="time" name="time_out" id="time_out" class="w-full p-2 border rounded">
+                <label class="block text-sm font-medium">Time Out</label>
+                <input type="time" name="time_out" class="w-full border rounded p-2" required>
             </div>
             <div class="mb-4">
-                <label for="engagement" class="block text-gray-700">Engagement</label>
-                <select name="engagement" id="engagement" class="w-full p-2 border rounded" required>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
+                <label class="block text-sm font-medium">Engagement</label>
+                <input type="text" name="engagement" class="w-full border rounded p-2" placeholder="e.g., Yes, No, Partial">
             </div>
             <div class="mb-4">
-                <label for="comments" class="block text-gray-700">Comments (optional)</label>
-                <textarea name="comments" id="comments" class="w-full p-2 border rounded"></textarea>
+                <label class="block text-sm font-medium">Comments</label>
+                <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments"></textarea>
             </div>
-            <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Record Attendance</button>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Record</button>
+            </div>
         </form>
+        {% else %}
+        <p class="text-red-600">No attendees assigned to this class. Please assign attendees via Manage Classes.</p>
+        {% endif %}
     </div>
-    
+
     <!-- Attendance Records -->
     <div class="bg-white p-6 rounded-lg shadow-md">
-        <h3 class="text-lg font-semibold mb-4">Attendance Records</h3>
+        <h2 class="text-lg font-bold mb-4">Attendance Records</h2>
         {% if attendance_records %}
-            <table class="w-full table-auto">
-                <thead>
-                    <tr class="bg-gray-200">
-                        <th class="px-4 py-2">Attendee</th>
-                        <th class="px-4 py-2">Time In</th>
-                        <th class="px-4 py-2">Time Out</th>
-                        <th class="px-4 py-2">Engagement</th>
-                        <th class="px-4 py-2">Comments</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for record in attendance_records %}
-                        <tr>
-                            <td class="border px-4 py-2">{{ record[1] }}</td>
-                            <td class="border px-4 py-2">{{ record[2] }}</td>
-                            <td class="border px-4 py-2">{{ record[3] or 'Not set' }}</td>
-                            <td class="border px-4 py-2">{{ record[4] }}</td>
-                            <td class="border px-4 py-2">{{ record[5] or '' }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <table class="w-full border-collapse">
+            <thead>
+                <tr class="bg-gray-200">
+                    <th class="border p-2">Attendee</th>
+                    <th class="border p-2">Time In</th>
+                    <th class="border p-2">Time Out</th>
+                    <th class="border p-2">Engagement</th>
+                    <th class="border p-2">Comments</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in attendance_records %}
+                <tr>
+                    <td class="border p-2">{{ record[1] }}</td>
+                    <td class="border p-2">{{ record[2] }}</td>
+                    <td class="border p-2">{{ record[3] }}</td>
+                    <td class="border p-2">{{ record[4] }}</td>
+                    <td class="border p-2">{{ record[5] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% else %}
-            <p class="text-gray-700">No attendance records for this class.</p>
+        <p>No attendance records for this class.</p>
         {% endif %}
+    </div>
+
+    <div class="mt-4">
+        <a href="{{ url_for('counselor_dashboard') }}" class="bg-gray-300 p-2 rounded">Back to Dashboard</a>
     </div>
 </div>
 {% endblock %}

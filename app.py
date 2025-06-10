@@ -716,6 +716,7 @@ def manage_classes():
         SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name
         FROM classes c
         LEFT JOIN users u ON c.counselor_id = u.id
+        ORDER BY c.date ASC
     """)
     classes = c.fetchall()
     c.execute("SELECT id, full_name, attendee_id FROM attendees")
@@ -841,7 +842,6 @@ def class_attendance(class_id):
     conn = get_db_connection()
     c = conn.cursor()
     try:
-        # Fetch class details
         c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
                   (class_id, current_user.id))
         class_info = c.fetchone()
@@ -851,13 +851,11 @@ def class_attendance(class_id):
             conn.close()
             return redirect(url_for('counselor_dashboard'))
 
-        # Fetch attendees assigned to the class
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
                   (class_id,))
         attendees = c.fetchall()
         logger.info(f"Retrieved {len(attendees)} attendees for class_id: {class_id}")
 
-        # Fetch existing attendance records
         c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
                   (class_id,))
         attendance_records = c.fetchall()
@@ -871,33 +869,28 @@ def class_attendance(class_id):
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
                 
-                # Validate inputs
                 if not attendee_ids or not time_in:
                     logger.warning(f"Missing required fields for attendance: attendee_ids={attendee_ids}, time_in={time_in}")
                     flash('Please select at least one attendee and provide time in')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
-                # Process each attendee
                 recorded_count = 0
                 skipped_count = 0
                 invalid_count = 0
                 try:
                     for attendee_id in attendee_ids:
-                        # Verify attendee is assigned to the class
                         c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                         if not c.fetchone():
                             logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
                             invalid_count += 1
                             continue
                         
-                        # Prevent duplicate attendance records
                         c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                         if c.fetchone():
                             logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
                             skipped_count += 1
                             continue
 
-                        # Insert attendance record
                         c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
                                   (class_id, attendee_id, time_in, time_out, engagement, comments))
                         recorded_count += 1

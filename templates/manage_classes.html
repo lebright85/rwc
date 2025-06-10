@@ -93,6 +93,7 @@
                     <button type="submit" class="bg-red-600 text-white p-1 rounded" onclick="return confirm('Are you sure you want to delete this class?')">Delete</button>
                 </form>
                 <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded">Assign Attendee</button>
+                <button onclick="openModal('assignGroupModal{{ class[0] }}')" class="bg-purple-600 text-white p-1 rounded">Assign Group</button>
             </div>
         </div>
         {% endfor %}
@@ -200,6 +201,32 @@
             {% else %}
             <p>No attendees assigned.</p>
             {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Assign Group Modals -->
+    {% for class in classes %}
+    <div id="assignGroupModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+            <h2 class="text-lg font-bold mb-4">Assign Group to {{ class[2] }}</h2>
+            <form method="POST">
+                <input type="hidden" name="action" value="assign_group">
+                <input type="hidden" name="class_id" value="{{ class[0] }}">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Group</label>
+                    <select name="group_name" class="w-full border rounded p-2" required>
+                        <option value="">Select a group</option>
+                        {% for group in groups %}
+                        <option value="{{ group }}">{{ group }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex justify-end">
+                    <button type="button" onclick="closeModal('assignGroupModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-purple-600 text-white p-2 rounded">Assign Group</button>
+                </div>
+            </form>
         </div>
     </div>
     {% endfor %}

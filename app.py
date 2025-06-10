@@ -264,7 +264,6 @@ def load_user(user_id):
         return User(user[0], user[1], user[2])
     return None
 
-# Routes remain unchanged (copied from your original)
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -295,7 +294,7 @@ def login():
                     return redirect(redirect_url)
                 except BuildError as e:
                     logger.error(f"Failed to redirect to counselor_dashboard for user: {username}. Error: {str(e)}")
-                    flash('Counselor dashboard is currently unavailable. Please try again later.')
+                    flash('Counselor dashboard is currently unavailable.')
                     return redirect(url_for('login'))
         flash('Invalid username or password')
         logger.warning(f"Login failed for username: {username}")
@@ -361,10 +360,8 @@ def reports():
     counselor_id = request.form.get('counselor_id', 'all')
     action = request.form.get('action', 'generate')
     
-    # Log filter values
     logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, action={action}")
     
-    # Build class query
     class_query = """
         SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
                u.full_name AS counselor_name, u.credentials AS counselor_credentials
@@ -375,7 +372,6 @@ def reports():
     params = []
     
     try:
-        # Validate and apply date filters
         if start_date and end_date:
             try:
                 start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -394,7 +390,6 @@ def reports():
             flash('Start and end dates are required', 'error')
             raise ValueError("Missing date filters")
 
-        # Apply other filters
         if class_id and class_id != 'all':
             class_query += " AND c.id = %s"
             params.append(int(class_id))
@@ -402,16 +397,13 @@ def reports():
             class_query += " AND c.counselor_id = %s"
             params.append(int(counselor_id))
         
-        # Fetch classes
         c.execute(class_query, params)
         class_records = c.fetchall()
         logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
 
-        # Group attendance by class
         report_data = []
         for class_record in class_records:
             class_id = class_record[0]
-            # Fetch attendees for this class
             attendee_query = """
                 SELECT att.full_name, att.attendee_id, att."group",
                        a.engagement, a.time_in, a.time_out, a.comments
@@ -691,6 +683,34 @@ def manage_classes():
             c.execute("DELETE FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
             conn.commit()
             flash('Attendee unassigned successfully')
+        elif action == 'assign_group':
+            class_id = request.form['class_id']
+            group_name = request.form['group_name']
+            try:
+                # Fetch attendees in the selected group
+                c.execute("SELECT id FROM attendees WHERE \"group\" = %s", (group_name,))
+                attendee_ids = [row[0] for row in c.fetchall()]
+                if not attendee_ids:
+                    flash(f'No attendees found in group {group_name}', 'error')
+                else:
+                    assigned_count = 0
+                    for attendee_id in attendee_ids:
+                        try:
+                            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                      (class_id, attendee_id))
+                            assigned_count += c.rowcount
+                        except psycopg2.Error as e:
+                            logger.error(f"Error assigning attendee {attendee_id} to class {class_id}: {e}")
+                    conn.commit()
+                    if assigned_count > 0:
+                        flash(f'Assigned {assigned_count} attendees from group {group_name} to class', 'success')
+                    else:
+                        flash(f'No new attendees assigned from group {group_name} (already assigned or no attendees)', 'info')
+            except psycopg2.Error as e:
+                logger.error(f"Error assigning group {group_name} to class {class_id}: {e}")
+                flash('An error occurred while assigning the group', 'error')
+                conn.rollback()
+    
     c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
     counselors = c.fetchall()
     c.execute("""
@@ -701,12 +721,15 @@ def manage_classes():
     classes = c.fetchall()
     c.execute("SELECT id, full_name, attendee_id FROM attendees")
     attendees = c.fetchall()
+    # Fetch unique group names
+    c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
+    groups = [row[0] for row in c.fetchall()]
     class_attendees = {}
     for class_ in classes:
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s", (class_[0],))
         class_attendees[class_[0]] = c.fetchall()
     conn.close()
-    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees)
+    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups)
 
 @app.route('/manage_attendees', methods=['GET', 'POST'])
 @login_required
@@ -795,7 +818,6 @@ def counselor_dashboard():
         c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
                   (current_user.id, (today + timedelta(days=1)).strftime('%Y-%m-%d'), week_later))
         upcoming_classes = c.fetchall()
-        # Validate class data
         for cls in today_classes + upcoming_classes:
             if None in cls:
                 logger.warning(f"Invalid class data: {cls}")
@@ -821,7 +843,6 @@ def class_attendance(class_id):
     conn = get_db_connection()
     c = conn.cursor()
     try:
-        # Fetch class details
         c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
                   (class_id, current_user.id))
         class_info = c.fetchone()
@@ -831,13 +852,11 @@ def class_attendance(class_id):
             conn.close()
             return redirect(url_for('counselor_dashboard'))
 
-        # Fetch attendees assigned to the class
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
                   (class_id,))
         attendees = c.fetchall()
         logger.info(f"Retrieved {len(attendees)} attendees for class_id: {class_id}")
 
-        # Fetch existing attendance records
         c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
                   (class_id,))
         attendance_records = c.fetchall()
@@ -847,24 +866,21 @@ def class_attendance(class_id):
             if action == 'record_attendance':
                 attendee_id = request.form.get('attendee_id')
                 time_in = request.form.get('time_in')
-                time_out = request.form.get('time_out', None)  # Optional
+                time_out = request.form.get('time_out', None)
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
                 
-                # Validate inputs
                 if not attendee_id or not time_in:
                     logger.warning(f"Missing required fields for attendance: attendee_id={attendee_id}, time_in={time_in}")
                     flash('Please provide attendee and time in')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
-                # Verify attendee_id is valid for this class
                 c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                 if not c.fetchone():
                     logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
                     flash('Selected attendee is not assigned to this class')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
-                # Prevent duplicate attendance records
                 c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                 if c.fetchone():
                     logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
@@ -888,13 +904,11 @@ def class_attendance(class_id):
                 attendance_id = request.form.get('attendance_id')
                 time_out = request.form.get('time_out')
                 
-                # Validate inputs
                 if not attendance_id or not time_out:
                     logger.warning(f"Missing required fields for update_timeout: attendance_id={attendance_id}, time_out={time_out}")
                     flash('Please provide attendance ID and time out')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
-                # Verify attendance record exists and belongs to this class
                 c.execute("SELECT 1 FROM attendance WHERE id = %s AND class_id = %s", (attendance_id, class_id))
                 if not c.fetchone():
                     logger.warning(f"Invalid attendance_id {attendance_id} for class_id {class_id}")
@@ -928,5 +942,5 @@ def class_attendance(class_id):
         return redirect(url_for('counselor_dashboard'))
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 10000))  # Match Render's detected port
+    port = int(os.getenv('PORT', 10000))
     app.run(debug=True, host='0.0.0.0', port=port)

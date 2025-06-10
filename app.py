@@ -687,7 +687,6 @@ def manage_classes():
             class_id = request.form['class_id']
             group_name = request.form['group_name']
             try:
-                # Fetch attendees in the selected group
                 c.execute("SELECT id FROM attendees WHERE \"group\" = %s", (group_name,))
                 attendee_ids = [row[0] for row in c.fetchall()]
                 if not attendee_ids:
@@ -721,7 +720,6 @@ def manage_classes():
     classes = c.fetchall()
     c.execute("SELECT id, full_name, attendee_id FROM attendees")
     attendees = c.fetchall()
-    # Fetch unique group names
     c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
     groups = [row[0] for row in c.fetchall()]
     class_attendees = {}
@@ -843,6 +841,7 @@ def class_attendance(class_id):
     conn = get_db_connection()
     c = conn.cursor()
     try:
+        # Fetch class details
         c.execute("SELECT id, class_name, date, group_hours, location FROM classes WHERE id = %s AND counselor_id = %s",
                   (class_id, current_user.id))
         class_info = c.fetchone()
@@ -852,11 +851,13 @@ def class_attendance(class_id):
             conn.close()
             return redirect(url_for('counselor_dashboard'))
 
+        # Fetch attendees assigned to the class
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
                   (class_id,))
         attendees = c.fetchall()
         logger.info(f"Retrieved {len(attendees)} attendees for class_id: {class_id}")
 
+        # Fetch existing attendance records
         c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
                   (class_id,))
         attendance_records = c.fetchall()
@@ -864,41 +865,61 @@ def class_attendance(class_id):
         if request.method == 'POST':
             action = request.form.get('action')
             if action == 'record_attendance':
-                attendee_id = request.form.get('attendee_id')
+                attendee_ids = request.form.getlist('attendee_ids')
                 time_in = request.form.get('time_in')
                 time_out = request.form.get('time_out', None)
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
                 
-                if not attendee_id or not time_in:
-                    logger.warning(f"Missing required fields for attendance: attendee_id={attendee_id}, time_in={time_in}")
-                    flash('Please provide attendee and time in')
+                # Validate inputs
+                if not attendee_ids or not time_in:
+                    logger.warning(f"Missing required fields for attendance: attendee_ids={attendee_ids}, time_in={time_in}")
+                    flash('Please select at least one attendee and provide time in')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
-                c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
-                if not c.fetchone():
-                    logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
-                    flash('Selected attendee is not assigned to this class')
-                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
-                
-                c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
-                if c.fetchone():
-                    logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
-                    flash('Attendance already recorded for this attendee in this class')
-                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
-
+                # Process each attendee
+                recorded_count = 0
+                skipped_count = 0
+                invalid_count = 0
                 try:
-                    c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                              (class_id, attendee_id, time_in, time_out, engagement, comments))
+                    for attendee_id in attendee_ids:
+                        # Verify attendee is assigned to the class
+                        c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
+                        if not c.fetchone():
+                            logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
+                            invalid_count += 1
+                            continue
+                        
+                        # Prevent duplicate attendance records
+                        c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
+                        if c.fetchone():
+                            logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
+                            skipped_count += 1
+                            continue
+
+                        # Insert attendance record
+                        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
+                                  (class_id, attendee_id, time_in, time_out, engagement, comments))
+                        recorded_count += 1
+                    
                     conn.commit()
-                    logger.info(f"Attendance recorded for class_id {class_id}, attendee_id {attendee_id}")
-                    flash('Attendance recorded successfully')
+                    if recorded_count > 0:
+                        flash(f'Attendance recorded successfully for {recorded_count} attendee(s)', 'success')
+                    if skipped_count > 0:
+                        flash(f'Skipped {skipped_count} attendee(s) with existing attendance records', 'info')
+                    if invalid_count > 0:
+                        flash(f'Skipped {invalid_count} invalid attendee(s) not assigned to this class', 'error')
+                    if recorded_count == 0 and (skipped_count > 0 or invalid_count > 0):
+                        flash('No new attendance records were created', 'error')
+                    logger.info(f"Attendance recorded for class_id {class_id}: {recorded_count} recorded, {skipped_count} skipped, {invalid_count} invalid")
                 except psycopg2.IntegrityError as e:
-                    logger.error(f"IntegrityError recording attendance for class_id {class_id}, attendee_id {attendee_id}: {e}")
-                    flash('Error recording attendance: Invalid data or duplicate entry')
+                    logger.error(f"IntegrityError recording attendance for class_id {class_id}: {e}")
+                    flash('Error recording attendance: Invalid data or duplicate entry', 'error')
+                    conn.rollback()
                 except psycopg2.Error as e:
-                    logger.error(f"Database error recording attendance for class_id {class_id}, attendee_id {attendee_id}: {e}")
-                    flash('An error occurred while recording attendance')
+                    logger.error(f"Database error recording attendance for class_id {class_id}: {e}")
+                    flash('An error occurred while recording attendance', 'error')
+                    conn.rollback()
 
             elif action == 'update_timeout':
                 attendance_id = request.form.get('attendance_id')

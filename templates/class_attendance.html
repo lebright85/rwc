@@ -11,12 +11,15 @@
         <form method="POST">
             <input type="hidden" name="action" value="record_attendance">
             <div class="mb-4">
-                <label class="block text-sm font-medium">Attendees (Hold Ctrl/Cmd to select multiple)</label>
-                <select name="attendee_ids" class="w-full border rounded p-2 h-32" multiple required>
+                <label class="block text-sm font-medium mb-2">Attendees</label>
+                <div class="grid grid-cols-1 gap-2">
                     {% for attendee in attendees %}
-                    <option value="{{ attendee[0] }}">{{ attendee[1] }} ({{ attendee[2] }})</option>
+                    <div class="flex items-center">
+                        <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}" class="mr-2">
+                        <label for="attendee_{{ attendee[0] }}" class="text-sm">{{ attendee[1] }} ({{ attendee[2] }})</label>
+                    </div>
                     {% endfor %}
-                </select>
+                </div>
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium">Time In</label>
@@ -35,7 +38,7 @@
                 <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments"></textarea>
             </div>
             <div class="flex justify-end">
-                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Record</button>
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Record Attendance</button>
             </div>
         </form>
         {% else %}

@@ -846,7 +846,7 @@ def class_attendance(class_id):
                   (class_id, current_user.id))
         class_info = c.fetchone()
         if not class_info:
-            logger.warning(f"Class {class_id} not found or not authorized for counselor_id: {current_user.id}")
+            logger.warning("Class %d not found or not authorized for counselor_id %d", class_id, current_user.id)
             flash('Class not found or you are not authorized')
             conn.close()
             return redirect(url_for('counselor_dashboard'))
@@ -854,7 +854,7 @@ def class_attendance(class_id):
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s",
                   (class_id,))
         attendees = c.fetchall()
-        logger.info(f"Retrieved {len(attendees)} attendees for class_id: {class_id}")
+        logger.info("Retrieved %d attendees for class_id: %d", len(attendees), class_id)
 
         c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
                   (class_id,))
@@ -870,7 +870,7 @@ def class_attendance(class_id):
                 comments = request.form.get('comments', '')
                 
                 if not attendee_ids or not time_in:
-                    logger.warning(f"Missing required fields for attendance: attendee_ids={attendee_ids}, time_in={time_in}")
+                    logger.warning("Missing required fields for attendance: attendee_ids=%s, time_in=%s", attendee_ids, time_in)
                     flash('Please select at least one attendee and provide time in')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
@@ -881,13 +881,13 @@ def class_attendance(class_id):
                     for attendee_id in attendee_ids:
                         c.execute("SELECT 1 FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                         if not c.fetchone():
-                            logger.warning(f"Invalid attendee_id {attendee_id} for class_id {class_id}")
+                            logger.warning("Invalid attendee_id %s for class_id %d", attendee_id, class_id)
                             invalid_count += 1
                             continue
                         
                         c.execute("SELECT 1 FROM attendance WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                         if c.fetchone():
-                            logger.warning(f"Duplicate attendance record attempted for class_id {class_id}, attendee_id {attendee_id}")
+                            logger.warning("Duplicate attendance record attempted for class_id %d, attendee_id %s", class_id, attendee_id)
                             skipped_count += 1
                             continue
 
@@ -904,13 +904,13 @@ def class_attendance(class_id):
                         flash(f'Skipped {invalid_count} invalid attendee(s) not assigned to this class', 'error')
                     if recorded_count == 0 and (skipped_count > 0 or invalid_count > 0):
                         flash('No new attendance records were created', 'error')
-                    logger.info(f"Attendance recorded for class_id {class_id}: {recorded_count} recorded, {skipped_count} skipped, {invalid_count} invalid")
+                    logger.info("Attendance recorded for class_id %d: %d recorded, %d skipped, %d invalid", class_id, recorded_count, skipped_count, invalid_count)
                 except psycopg2.IntegrityError as e:
-                    logger.error(f"IntegrityError recording attendance for class_id {class_id}: {e}")
+                    logger.error("IntegrityError recording attendance for class_id %d: %s", class_id, e)
                     flash('Error recording attendance: Invalid data or duplicate entry', 'error')
                     conn.rollback()
                 except psycopg2.Error as e:
-                    logger.error(f"Database error recording attendance for class_id {class_id}: {e}")
+                    logger.error("Database error recording attendance for class_id %d: %s", class_id, e)
                     flash('An error occurred while recording attendance', 'error')
                     conn.rollback()
 
@@ -919,13 +919,13 @@ def class_attendance(class_id):
                 time_out = request.form.get('time_out')
                 
                 if not attendance_id or not time_out:
-                    logger.warning(f"Missing required fields for update_timeout: attendance_id={attendance_id}, time_out={time_out}")
+                    logger.warning("Missing required fields for update_timeout: attendance_id=%s, time_out=%s", attendance_id, time_out)
                     flash('Please provide attendance ID and time out')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
                 c.execute("SELECT 1 FROM attendance WHERE id = %s AND class_id = %s", (attendance_id, class_id))
                 if not c.fetchone():
-                    logger.warning(f"Invalid attendance_id {attendance_id} for class_id {class_id}")
+                    logger.warning("Invalid attendance_id %s for class_id %d", attendance_id, class_id)
                     flash('Invalid attendance record')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
 
@@ -933,11 +933,40 @@ def class_attendance(class_id):
                     c.execute("UPDATE attendance SET time_out = %s WHERE id = %s AND class_id = %s",
                               (time_out, attendance_id, class_id))
                     conn.commit()
-                    logger.info(f"Time out updated for attendance_id {attendance_id}, class_id {class_id}")
+                    logger.info("Time out updated for attendance_id %s, class_id %d", attendance_id, class_id)
                     flash('Time out updated successfully')
                 except psycopg2.Error as e:
-                    logger.error(f"Database error updating time out for attendance_id {attendance_id}: {e}")
-                    flash('An error occurred while updating time out')
+                    logger.error("Database error updating time out for attendance_id %s: %s", attendance_id, e)
+                    flash('An error occurred while updating time out', 'error')
+                    conn.rollback()
+
+            elif action == 'update_attendance':
+                attendance_id = request.form.get('attendance_id')
+                time_in = request.form.get('time_in')
+                engagement = request.form.get('engagement', '')
+                comments = request.form.get('comments', '')
+                
+                if not attendance_id or not time_in:
+                    logger.warning("Missing required fields for update_attendance: attendance_id=%s, time_in=%s", attendance_id, time_in)
+                    flash('Please provide attendance ID and time in')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+                
+                c.execute("SELECT 1 FROM attendance WHERE id = %s AND class_id = %s", (attendance_id, class_id))
+                if not c.fetchone():
+                    logger.warning("Invalid attendance_id %s for class_id %d", attendance_id, class_id)
+                    flash('Invalid attendance record')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+
+                try:
+                    c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s WHERE id = %s AND class_id = %s",
+                              (time_in, engagement, comments, attendance_id, class_id))
+                    conn.commit()
+                    logger.info("Attendance updated for attendance_id %s, class_id %d", attendance_id, class_id)
+                    flash('Attendance updated successfully')
+                except psycopg2.Error as e:
+                    logger.error("Database error updating attendance for attendance_id %s: %s", attendance_id, e)
+                    flash('An error occurred while updating attendance', 'error')
+                    conn.rollback()
 
         conn.close()
         if not attendees:
@@ -945,12 +974,12 @@ def class_attendance(class_id):
         return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
     
     except psycopg2.Error as e:
-        logger.error(f"Database error in class_attendance for class_id {class_id}: {e}")
+        logger.error("Database error in class_attendance for class_id %d: %s", class_id, e)
         flash('Error loading attendance page. Please try again later.')
         conn.close()
         return redirect(url_for('counselor_dashboard'))
     except Exception as e:
-        logger.error(f"Unexpected error in class_attendance for class_id {class_id}: {e}")
+        logger.error("Unexpected error in class_attendance for class_id %d: %s", class_id, e)
         flash('An unexpected error occurred. Please try again later.')
         conn.close()
         return redirect(url_for('counselor_dashboard'))

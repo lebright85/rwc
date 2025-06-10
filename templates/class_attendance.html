@@ -11,9 +11,8 @@
         <form method="POST">
             <input type="hidden" name="action" value="record_attendance">
             <div class="mb-4">
-                <label class="block text-sm font-medium">Attendee</label>
-                <select name="attendee_id" class="w-full border rounded p-2" required>
-                    <option value="">Select an attendee</option>
+                <label class="block text-sm font-medium">Attendees (Hold Ctrl/Cmd to select multiple)</label>
+                <select name="attendee_ids" class="w-full border rounded p-2 h-32" multiple required>
                     {% for attendee in attendees %}
                     <option value="{{ attendee[0] }}">{{ attendee[1] }} ({{ attendee[2] }})</option>
                     {% endfor %}

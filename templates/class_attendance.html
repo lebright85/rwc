@@ -21,9 +21,13 @@
                     {% endfor %}
                 </div>
             </div>
+            <div class="mb-4 flex items-center">
+                <input type="checkbox" name="absent" id="absent" class="mr-2">
+                <label for="absent" class="text-sm font-medium">Mark as Absent</label>
+            </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium">Time In</label>
-                <input type="time" name="time_in" class="w-full border rounded p-2" required>
+                <input type="time" name="time_in" class="w-full border rounded p-2">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium">Time Out (Optional)</label>
@@ -54,6 +58,7 @@
             <thead>
                 <tr class="bg-gray-200">
                     <th class="border p-2">Attendee</th>
+                    <th class="border p-2">Absent</th>
                     <th class="border p-2">Time In</th>
                     <th class="border p-2">Time Out</th>
                     <th class="border p-2">Engagement</th>
@@ -65,10 +70,11 @@
                 {% for record in attendance_records %}
                 <tr>
                     <td class="border p-2">{{ record[1] }}</td>
-                    <td class="border p-2">{{ record[2] }}</td>
+                    <td class="border p-2">{{ 'Yes' if record[6] else 'No' }}</td>
+                    <td class="border p-2">{{ record[2] or 'N/A' }}</td>
                     <td class="border p-2">{{ record[3] or 'Not set' }}</td>
-                    <td class="border p-2">{{ record[4] }}</td>
-                    <td class="border p-2">{{ record[5] }}</td>
+                    <td class="border p-2">{{ record[4] or 'N/A' }}</td>
+                    <td class="border p-2">{{ record[5] or 'N/A' }}</td>
                     <td class="border p-2">
                         <button onclick="openModal('editAttendanceModal{{ record[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
                         <form method="POST" class="inline">
@@ -86,17 +92,21 @@
                         <form method="POST">
                             <input type="hidden" name="action" value="update_attendance">
                             <input type="hidden" name="attendance_id" value="{{ record[0] }}">
+                            <div class="mb-4 flex items-center">
+                                <input type="checkbox" name="absent" id="absent_{{ record[0] }}" class="mr-2" {% if record[6] %}checked{% endif %}>
+                                <label for="absent_{{ record[0] }}" class="text-sm font-medium">Mark as Absent</label>
+                            </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium">Time In</label>
-                                <input type="time" name="time_in" value="{{ record[2] }}" class="w-full border rounded p-2" required>
+                                <input type="time" name="time_in" value="{{ record[2] or '' }}" class="w-full border rounded p-2">
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium">Engagement</label>
-                                <input type="text" name="engagement" value="{{ record[4] }}" class="w-full border rounded p-2" placeholder="e.g., Yes, No, Partial">
+                                <input type="text" name="engagement" value="{{ record[4] or '' }}" class="w-full border rounded p-2" placeholder="e.g., Yes, No, Partial">
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium">Comments</label>
-                                <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments">{{ record[5] }}</textarea>
+                                <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments">{{ record[5] or '' }}</textarea>
                             </div>
                             <div class="flex justify-end">
                                 <button type="button" onclick="closeModal('editAttendanceModal{{ record[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>

@@ -113,6 +113,7 @@ def init_db():
                     time_out TEXT,
                     engagement TEXT,
                     comments TEXT,
+                    absent BOOLEAN NOT NULL DEFAULT FALSE,
                     FOREIGN KEY (class_id) REFERENCES classes(id),
                     FOREIGN KEY (attendee_id) REFERENCES attendees(id)
                 )''')
@@ -161,12 +162,12 @@ def init_db():
                 attendee_id2 = c.fetchone()[0]
                 logger.info("Sample attendees inserted")
 
-                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                          (mindfulness_id, attendee_id, '10:00', '11:30', 'Yes', 'Actively participated'))
-                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                          (mindfulness_id, attendee_id2, '10:00', '11:30', 'Yes', 'Good engagement'))
-                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                          (yoga_id, attendee_id, '13:00', '14:00', 'Yes', 'Good participation'))
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (mindfulness_id, attendee_id, '10:00', '11:30', 'Yes', 'Actively participated', False))
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (mindfulness_id, attendee_id2, '10:00', '11:30', 'Yes', 'Good engagement', False))
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (yoga_id, attendee_id, '13:00', '14:00', 'Yes', 'Good participation', False))
                 logger.info("Sample attendance inserted")
 
                 c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (mindfulness_id, attendee_id))
@@ -330,7 +331,7 @@ def attendee_profile(attendee_id):
     c.execute("SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location FROM classes c JOIN class_attendees ca ON c.id = ca.class_id WHERE ca.attendee_id = %s",
               (attendee_id,))
     assigned_classes = c.fetchall()
-    c.execute("SELECT c.class_name, a.time_in, a.time_out, a.engagement, a.comments FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
+    c.execute("SELECT c.class_name, a.time_in, a.time_out, a.engagement, a.comments, a.absent FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
               (attendee_id,))
     attendance_records = c.fetchall()
     conn.close()
@@ -406,7 +407,7 @@ def reports():
             class_id = class_record[0]
             attendee_query = """
                 SELECT att.full_name, att.attendee_id, att."group",
-                       a.engagement, a.time_in, a.time_out, a.comments
+                       a.engagement, a.time_in, a.time_out, a.comments, a.absent
                 FROM attendance a
                 JOIN attendees att ON a.attendee_id = att.id
                 WHERE a.class_id = %s
@@ -433,7 +434,7 @@ def reports():
                 writer = csv.writer(output)
                 writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
                                  'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
-                                 'Attendee Group', 'Engagement', 'Time In', 'Time Out', 'Comments'])
+                                 'Attendee Group', 'Absent', 'Engagement', 'Time In', 'Time Out', 'Comments'])
                 for data in report_data:
                     class_record = data['class']
                     class_info = [
@@ -447,7 +448,8 @@ def reports():
                             row = class_info if idx == 0 else ['', '', '', '', '', '', '']
                             row += [
                                 attendee[0] or 'No attendees', attendee[1] or '',
-                                attendee[2] or '', attendee[3] or '', attendee[4] or '',
+                                attendee[2] or '', 'Yes' if attendee[7] else 'No',
+                                attendee[3] or '', attendee[4] or '',
                                 attendee[5] or '', attendee[6] or ''
                             ]
                             writer.writerow(row)
@@ -825,12 +827,12 @@ def counselor_dashboard():
                                today=today_str, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
     except psycopg2.Error as e:
         logger.error(f"Database error in counselor_dashboard for user_id: {current_user.id}: {e}")
-        flash('Error loading dashboard. Please try again later.')
+        flash('Error loading dashboard. Please try again.')
         conn.close()
         return redirect(url_for('login'))
     except Exception as e:
         logger.error(f"Unexpected error in counselor_dashboard for user_id: {current_user.id}: {e}")
-        flash('An unexpected error occurred. Please try again later.')
+        flash('An unexpected error occurred. Please try again.')
         conn.close()
         return redirect(url_for('login'))
 
@@ -856,7 +858,7 @@ def class_attendance(class_id):
         attendees = c.fetchall()
         logger.info("Retrieved %d attendees for class_id: %d", len(attendees), class_id)
 
-        c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
+        c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments, att.absent FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
                   (class_id,))
         attendance_records = c.fetchall()
 
@@ -868,10 +870,16 @@ def class_attendance(class_id):
                 time_out = request.form.get('time_out', None)
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
+                absent = request.form.get('absent', 'off') == 'on'
                 
-                if not attendee_ids or not time_in:
-                    logger.warning("Missing required fields for attendance: attendee_ids=%s, time_in=%s", attendee_ids, time_in)
-                    flash('Please select at least one attendee and provide time in')
+                if not attendee_ids:
+                    logger.warning("No attendees selected for class_id %d", class_id)
+                    flash('Please select at least one attendee')
+                    return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
+                
+                if not absent and not time_in:
+                    logger.warning("Missing time_in for non-absent attendance for class_id %d", class_id)
+                    flash('Please provide time in for non-absent attendees')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
                 recorded_count = 0
@@ -891,8 +899,8 @@ def class_attendance(class_id):
                             skipped_count += 1
                             continue
 
-                        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
-                                  (class_id, attendee_id, time_in, time_out, engagement, comments))
+                        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                  (class_id, attendee_id, None if absent else time_in, None if absent else time_out, None if absent else engagement, None if absent else comments, absent))
                         recorded_count += 1
                     
                     conn.commit()
@@ -945,10 +953,11 @@ def class_attendance(class_id):
                 time_in = request.form.get('time_in')
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
+                absent = request.form.get('absent', 'off') == 'on'
                 
-                if not attendance_id or not time_in:
-                    logger.warning("Missing required fields for update_attendance: attendance_id=%s, time_in=%s", attendance_id, time_in)
-                    flash('Please provide attendance ID and time in')
+                if not attendance_id or (not absent and not time_in):
+                    logger.warning("Missing required fields for update_attendance: attendance_id=%s, time_in=%s, absent=%s", attendance_id, time_in, absent)
+                    flash('Please provide attendance ID and time in for non-absent records')
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
                 
                 c.execute("SELECT 1 FROM attendance WHERE id = %s AND class_id = %s", (attendance_id, class_id))
@@ -958,8 +967,8 @@ def class_attendance(class_id):
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
 
                 try:
-                    c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s WHERE id = %s AND class_id = %s",
-                              (time_in, engagement, comments, attendance_id, class_id))
+                    c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s, absent = %s WHERE id = %s AND class_id = %s",
+                              (None if absent else time_in, None if absent else engagement, None if absent else comments, absent, attendance_id, class_id))
                     conn.commit()
                     logger.info("Attendance updated for attendance_id %s, class_id %d", attendance_id, class_id)
                     flash('Attendance updated successfully')
@@ -975,12 +984,12 @@ def class_attendance(class_id):
     
     except psycopg2.Error as e:
         logger.error("Database error in class_attendance for class_id %d: %s", class_id, e)
-        flash('Error loading attendance page. Please try again later.')
+        flash('Error loading attendance page. Please try again.')
         conn.close()
         return redirect(url_for('counselor_dashboard'))
     except Exception as e:
         logger.error("Unexpected error in class_attendance for class_id %d: %s", class_id, e)
-        flash('An unexpected error occurred. Please try again later.')
+        flash('An unexpected error occurred. Please try again.')
         conn.close()
         return redirect(url_for('counselor_dashboard'))
 

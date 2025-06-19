@@ -331,9 +331,21 @@ def attendee_profile(attendee_id):
     c.execute("SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location FROM classes c JOIN class_attendees ca ON c.id = ca.class_id WHERE ca.attendee_id = %s",
               (attendee_id,))
     assigned_classes = c.fetchall()
-    c.execute("SELECT c.class_name, a.time_in, a.time_out, a.engagement, a.comments, a.absent FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
-              (attendee_id,))
-    attendance_records = c.fetchall()
+    # Check if absent column exists
+    try:
+        c.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'attendance' AND column_name = 'absent'")
+        has_absent = c.fetchone() is not None
+        if has_absent:
+            c.execute("SELECT c.class_name, a.time_in, a.time_out, a.engagement, a.comments, a.absent FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
+                      (attendee_id,))
+        else:
+            c.execute("SELECT c.class_name, a.time_in, a.time_out, a.engagement, a.comments, FALSE as absent FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
+                      (attendee_id,))
+        attendance_records = c.fetchall()
+    except psycopg2.Error as e:
+        logger.error(f"Error checking absent column in attendee_profile: {e}")
+        flash('Error loading attendance records.')
+        attendance_records = []
     conn.close()
     return render_template('attendee_profile.html', attendee=attendee, assigned_classes=assigned_classes, attendance_records=attendance_records)
 
@@ -402,16 +414,29 @@ def reports():
         class_records = c.fetchall()
         logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
 
+        # Check if absent column exists
+        c.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'attendance' AND column_name = 'absent'")
+        has_absent = c.fetchone() is not None
+
         report_data = []
         for class_record in class_records:
             class_id = class_record[0]
-            attendee_query = """
-                SELECT att.full_name, att.attendee_id, att."group",
-                       a.engagement, a.time_in, a.time_out, a.comments, a.absent
-                FROM attendance a
-                JOIN attendees att ON a.attendee_id = att.id
-                WHERE a.class_id = %s
-            """
+            if has_absent:
+                attendee_query = """
+                    SELECT att.full_name, att.attendee_id, att."group",
+                           a.engagement, a.time_in, a.time_out, a.comments, a.absent
+                    FROM attendance a
+                    JOIN attendees att ON a.attendee_id = att.id
+                    WHERE a.class_id = %s
+                """
+            else:
+                attendee_query = """
+                    SELECT att.full_name, att.attendee_id, att."group",
+                           a.engagement, a.time_in, a.time_out, a.comments, FALSE as absent
+                    FROM attendance a
+                    JOIN attendees att ON a.attendee_id = att.id
+                    WHERE a.class_id = %s
+                """
             attendee_params = [class_id]
             if attendee_id and attendee_id != 'all':
                 attendee_query += " AND a.attendee_id = %s"
@@ -858,9 +883,21 @@ def class_attendance(class_id):
         attendees = c.fetchall()
         logger.info("Retrieved %d attendees for class_id: %d", len(attendees), class_id)
 
-        c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments, att.absent FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
-                  (class_id,))
-        attendance_records = c.fetchall()
+        # Check if absent column exists
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'attendance' AND column_name = 'absent'")
+            has_absent = c.fetchone() is not None
+            if has_absent:
+                c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments, att.absent FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
+                          (class_id,))
+            else:
+                c.execute("SELECT att.id, a.full_name, att.time_in, att.time_out, att.engagement, att.comments, FALSE as absent FROM attendees a JOIN attendance att ON a.id = att.attendee_id WHERE att.class_id = %s",
+                          (class_id,))
+            attendance_records = c.fetchall()
+        except psycopg2.Error as e:
+            logger.error(f"Error checking absent column in class_attendance: {e}")
+            flash('Error loading attendance records.')
+            attendance_records = []
 
         if request.method == 'POST':
             action = request.form.get('action')
@@ -870,7 +907,7 @@ def class_attendance(class_id):
                 time_out = request.form.get('time_out', None)
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
-                absent = request.form.get('absent', 'off') == 'on'
+                absent = request.form.get('absent', 'off') == 'on' if has_absent else False
                 
                 if not attendee_ids:
                     logger.warning("No attendees selected for class_id %d", class_id)
@@ -899,8 +936,12 @@ def class_attendance(class_id):
                             skipped_count += 1
                             continue
 
-                        c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                                  (class_id, attendee_id, None if absent else time_in, None if absent else time_out, None if absent else engagement, None if absent else comments, absent))
+                        if has_absent:
+                            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments, absent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                      (class_id, attendee_id, None if absent else time_in, None if absent else time_out, None if absent else engagement, None if absent else comments, absent))
+                        else:
+                            c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, engagement, comments) VALUES (%s, %s, %s, %s, %s, %s)",
+                                      (class_id, attendee_id, time_in, time_out, engagement, comments))
                         recorded_count += 1
                     
                     conn.commit()
@@ -953,7 +994,7 @@ def class_attendance(class_id):
                 time_in = request.form.get('time_in')
                 engagement = request.form.get('engagement', '')
                 comments = request.form.get('comments', '')
-                absent = request.form.get('absent', 'off') == 'on'
+                absent = request.form.get('absent', 'off') == 'on' if has_absent else False
                 
                 if not attendance_id or (not absent and not time_in):
                     logger.warning("Missing required fields for update_attendance: attendance_id=%s, time_in=%s, absent=%s", attendance_id, time_in, absent)
@@ -967,8 +1008,12 @@ def class_attendance(class_id):
                     return render_template('class_attendance.html', class_info=class_info, attendees=attendees, attendance_records=attendance_records)
 
                 try:
-                    c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s, absent = %s WHERE id = %s AND class_id = %s",
-                              (None if absent else time_in, None if absent else engagement, None if absent else comments, absent, attendance_id, class_id))
+                    if has_absent:
+                        c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s, absent = %s WHERE id = %s AND class_id = %s",
+                                  (None if absent else time_in, None if absent else engagement, None if absent else comments, absent, attendance_id, class_id))
+                    else:
+                        c.execute("UPDATE attendance SET time_in = %s, engagement = %s, comments = %s WHERE id = %s AND class_id = %s",
+                                  (time_in, engagement, comments, attendance_id, class_id))
                     conn.commit()
                     logger.info("Attendance updated for attendance_id %s, class_id %d", attendance_id, class_id)
                     flash('Attendance updated successfully')

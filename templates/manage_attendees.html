@@ -3,105 +3,82 @@
 <div class="max-w-4xl mx-auto">
     <h1 class="text-2xl font-bold mb-6">Manage Attendees</h1>
 
-    <!-- Add Attendee Form -->
+    <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 class="text-lg font-bold mb-4">Add New Attendee</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="add">
+        <h2 class="text-lg font-bold mb-4">Filter Attendees</h2>
+        <form method="GET">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium">Full Name</label>
-                    <input type="text" name="full_name" class="w-full border rounded p-2" required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium">Attendee ID</label>
-                    <input type="text" name="attendee_id" class="w-full border rounded p-2" required>
-                </div>
-                <div>
                     <label class="block text-sm font-medium">Group</label>
-                    <input type="text" name="group" class="w-full border rounded p-2" placeholder="e.g., Group A">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium">Group Details</label>
-                    <input type="text" name="group_details" class="w-full border rounded p-2" placeholder="e.g., Morning Session">
-                </div>
-                <div class="col-span-2">
-                    <label class="block text-sm font-medium">Notes</label>
-                    <textarea name="notes" class="w-full border rounded p-2" placeholder="Optional notes"></textarea>
+                    <select name="group_filter" class="w-full border rounded p-2">
+                        <option value="all" {% if group_filter == 'all' %}selected{% endif %}>All Groups</option>
+                        {% for group in groups %}
+                        <option value="{{ group }}" {% if group_filter == group %}selected{% endif %}>{{ group }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
-            <div class="mt-4">
-                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add Attendee</button>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Filter</button>
             </div>
         </form>
     </div>
 
-    <!-- Attendees List -->
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-lg font-bold mb-4">Attendees</h2>
-        {% if attendees %}
-        {% for attendee in attendees %}
-        <div class="border-b py-4 last:border-b-0">
-            <h3 class="text-md font-bold">
-                Attendee: {{ attendee[1] }} ({{ attendee[2] }})
-            </h3>
-            <p class="text-sm mt-1">Group: {{ attendee[3] or 'None' }}</p>
-            <p class="text-sm mt-1">Group Details: {{ attendee[4] or 'None' }}</p>
-            <p class="text-sm mt-1">Notes: {{ attendee[5] or 'None' }}</p>
-            <div class="mt-2 flex space-x-2">
-                <button onclick="openModal('editAttendeeModal{{ attendee[0] }}')" class="bg-blue-600 text-white p-1 rounded">Edit</button>
-                <a href="{{ url_for('attendee_profile', attendee_id=attendee[0]) }}" class="bg-gray-600 text-white p-1 rounded">View Profile</a>
-                <form method="POST" class="inline">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                    <button type="submit" class="bg-red-600 text-white p-1 rounded" onclick="return confirm('Are you sure you want to delete this attendee?')">Delete</button>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
-        {% else %}
-        <p>No attendees found.</p>
-        {% endif %}
+    <!-- Add Attendee Modal -->
+    <div class="mb-6">
+        <button onclick="openModal('addAttendeeModal')" class="bg-blue-600 text-white p-2 rounded">Add Attendee</button>
     </div>
-
-    <!-- Edit Modals -->
-    {% for attendee in attendees %}
-    <div id="editAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm">
-            <h2 class="text-lg font-bold mb-4">Edit Attendee</h2>
+    <div id="addAttendeeModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+            <h2 class="text-lg font-bold mb-4">Add Attendee</h2>
             <form method="POST">
-                <input type="hidden" name="action" value="edit">
-                <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Full Name</label>
-                    <input type="text" name="full_name" value="{{ attendee[1] }}" class="w-full border rounded p-2" required>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Attendee ID</label>
-                    <input type="text" name="new_attendee_id" value="{{ attendee[2] }}" class="w-full border rounded p-2" required>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Group</label>
-                    <input type="text" name="group" value="{{ attendee[3] }}" class="w-full border rounded p-2" placeholder="e.g., Group A">
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Group Details</label>
-                    <input type="text" name="group_details" value="{{ attendee[4] }}" class="w-full border rounded p-2" placeholder="e.g., Morning Session">
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Notes</label>
-                    <textarea name="notes" class="w-full border rounded p-2" placeholder="Optional notes">{{ attendee[5] }}</textarea>
-                </div>
+                <input type="hidden" name="action" value="add">
+                <!-- Form fields for add attendee -->
                 <div class="flex justify-end">
-                    <button type="button" onclick="closeModal('editAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
+                    <button type="button" onclick="closeModal('addAttendeeModal')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add</button>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- Attendees List -->
+    {% for attendee in attendees %}
+    <div class="border-b py-4 last:border-b-0">
+        <h3 class="text-md font-bold">
+            Attendee: {{ attendee[1] }} ({{ attendee[2] }})
+        </h3>
+        <p>Group: {{ attendee[3] or 'N/A' }}</p>
+        <p>Group Details: {{ attendee[4] or 'N/A' }}</p>
+        <p>Notes: {{ attendee[5] or 'N/A' }}</p>
+        <div class="mt-2">
+            <button onclick="openModal('editAttendeeModal{{ attendee[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
+            <form method="POST" class="inline">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                <button type="submit" class="bg-red-600 text-white p-1 rounded">Delete</button>
+            </form>
+        </div>
+
+        <!-- Edit Attendee Modal -->
+        <div id="editAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+                <h2 class="text-lg font-bold mb-4">Edit Attendee</h2>
+                <form method="POST">
+                    <input type="hidden" name="action" value="edit">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <!-- Form fields with pre-filled values -->
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('editAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
+                        <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     {% endfor %}
 
-    <!-- JavaScript for Modal -->
+    <!-- JavaScript for Modals -->
     <script>
         function openModal(modalId) {
             document.getElementById(modalId).classList.remove('hidden');

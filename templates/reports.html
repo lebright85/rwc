@@ -70,11 +70,11 @@
                         <th class="border p-2">Attendee Name</th>
                         <th class="border p-2">Attendee ID</th>
                         <th class="border p-2">Group</th>
-                        <th class="border p-2">Absent</th>
-                        <th class="border p-2">Engagement</th>
+                        <th class="border p-2">Status</th>
                         <th class="border p-2">Time In</th>
                         <th class="border p-2">Time Out</th>
-                        <th class="border p-2">Comments</th>
+                        <th class="border p-2">Notes</th>
+                        <th class="border p-2">Location</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -83,11 +83,11 @@
                         <td class="border p-2">{{ attendee[0] }}</td>
                         <td class="border p-2">{{ attendee[1] }}</td>
                         <td class="border p-2">{{ attendee[2] }}</td>
-                        <td class="border p-2">{{ 'Yes' if attendee[7] else 'No' }}</td>
-                        <td class="border p-2">{{ attendee[3] or 'N/A' }}</td>
+                        <td class="border p-2">{{ attendee[3] or 'Present' }}</td>
                         <td class="border p-2">{{ attendee[4] or 'N/A' }}</td>
                         <td class="border p-2">{{ attendee[5] or 'N/A' }}</td>
                         <td class="border p-2">{{ attendee[6] or 'N/A' }}</td>
+                        <td class="border p-2">{{ attendee[7] or 'N/A' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

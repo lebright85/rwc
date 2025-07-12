@@ -50,22 +50,22 @@
             <thead>
                 <tr class="bg-gray-200">
                     <th class="border p-2">Class Name</th>
-                    <th class="border p-2">Absent</th>
+                    <th class="border p-2">Status</th>
                     <th class="border p-2">Time In</th>
                     <th class="border p-2">Time Out</th>
-                    <th class="border p-2">Engagement</th>
-                    <th class="border p-2">Comments</th>
+                    <th class="border p-2">Notes</th>
+                    <th class="border p-2">Location</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in attendance_records %}
                 <tr>
                     <td class="border p-2">{{ record[0] }}</td>
-                    <td class="border p-2">{{ 'Yes' if record[5] else 'No' }}</td>
+                    <td class="border p-2">{{ record[3] or 'Present' }}</td>
                     <td class="border p-2">{{ record[1] or 'N/A' }}</td>
                     <td class="border p-2">{{ record[2] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[3] or 'N/A' }}</td>
                     <td class="border p-2">{{ record[4] or 'N/A' }}</td>
+                    <td class="border p-2">{{ record[5] or 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

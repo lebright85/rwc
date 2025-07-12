@@ -128,7 +128,6 @@ def init_db():
                 )''')
                 logger.info("Class_attendees table created")
 
-                # Sample data (updated for new columns)
                 c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                           ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
                 c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
@@ -658,23 +657,24 @@ def manage_classes():
                 c.execute("UPDATE classes SET group_name = %s, class_name = %s, date = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s",
                           (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency, class_id))
                 conn.commit()
-                # Retain existing attendees if not changed
                 attendee_ids = request.form.getlist('attendee_ids')
-                if attendee_ids:
-                    c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
-                    for attendee_id in attendee_ids:
-                        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                                  (class_id, attendee_id))
+                c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                for attendee_id in attendee_ids:
+                    c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (class_id, attendee_id))
                 conn.commit()
                 flash('Class updated successfully')
                 if propagate and recurring:
-                    # Propagate to future instances
                     c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s",
                               (class_name, counselor_id, date))
                     future_ids = [row[0] for row in c.fetchall()]
                     for future_id in future_ids:
                         c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s WHERE id = %s",
                                   (group_name, class_name, group_hours, counselor_id, group_type, notes, location, future_id))
+                        # Optionally propagate attendees
+                        for attendee_id in attendee_ids:
+                            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                      (future_id, attendee_id))
                     conn.commit()
                     flash('Changes propagated to future recurring classes')
             except psycopg2.IntegrityError:
@@ -913,13 +913,16 @@ def class_attendance(class_id):
         attendees = c.fetchall()
         logger.info("Retrieved %d attendees for class_id: %d", len(attendees), class_id)
 
-        attendance_records = {}
+        # Pre-populate attendance_records with defaults for all attendees to avoid KeyError
+        attendance_records = {a[0]: (None, None, 'Present', None, None) for a in attendees}
+
+        # Fetch existing records and overwrite defaults
         c.execute("SELECT attendee_id, time_in, time_out, attendance_status, notes, location FROM attendance WHERE class_id = %s",
                   (class_id,))
         for record in c.fetchall():
             attendance_records[record[0]] = record[1:]
 
-        if request.method == 'POST' and action == 'submit_attendance' and not locked:
+        if request.method == 'POST' and request.form.get('action') == 'submit_attendance' and not locked:
             for attendee in attendees:
                 attendee_id = attendee[0]
                 present = request.form.get(f'present_{attendee_id}', 'off') == 'on'

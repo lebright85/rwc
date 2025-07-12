@@ -3,135 +3,73 @@
 <div class="max-w-4xl mx-auto">
     <h1 class="text-2xl font-bold mb-6">Class Attendance: {{ class_info[1] }}</h1>
     <p class="mb-4">Date: {{ class_info[2] }} | Time: {{ class_info[3] }} | Location: {{ class_info[4] }}</p>
+    {% if locked %}
+    <p class="text-red-600 mb-4">This class is locked and cannot be edited.</p>
+    {% endif %}
 
-    <!-- Record Attendance Form -->
+    <!-- Attendance Table Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 class="text-lg font-bold mb-4">Record Attendance</h2>
+        <h2 class="text-lg font-bold mb-4">Attendance</h2>
         {% if attendees %}
         <form method="POST">
-            <input type="hidden" name="action" value="record_attendance">
-            <div class="mb-4">
-                <label class="block text-sm font-medium mb-2">Attendees</label>
-                <div class="grid grid-cols-1 gap-2">
+            <input type="hidden" name="action" value="submit_attendance">
+            <table class="w-full border-collapse">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Present</th>
+                        <th class="border p-2">Attendee Name</th>
+                        <th class="border p-2">Time In</th>
+                        <th class="border p-2">Time Out</th>
+                        <th class="border p-2">Status</th>
+                        <th class="border p-2">Notes</th>
+                        <th class="border p-2">Location</th>
+                    </tr>
+                </thead>
+                <tbody>
                     {% for attendee in attendees %}
-                    <div class="flex items-center">
-                        <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}" class="mr-2">
-                        <label for="attendee_{{ attendee[0] }}" class="text-sm">{{ attendee[1] }} ({{ attendee[2] }})</label>
-                    </div>
+                    <tr>
+                        <td class="border p-2">
+                            <input type="checkbox" name="present_{{ attendee[0] }}" id="present_{{ attendee[0] }}" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Present' %}checked{% endif %} {% if locked %}disabled{% endif %}>
+                        </td>
+                        <td class="border p-2">{{ attendee[1] }} ({{ attendee[2] }})</td>
+                        <td class="border p-2">
+                            <input type="time" name="time_in_{{ attendee[0] }}" value="{{ attendance_records[attendee[0]][0] or '' }}" class="w-full border rounded p-1" {% if locked %}disabled{% endif %}>
+                        </td>
+                        <td class="border p-2">
+                            <input type="time" name="time_out_{{ attendee[0] }}" value="{{ attendance_records[attendee[0]][1] or '' }}" class="w-full border rounded p-1" {% if locked %}disabled{% endif %}>
+                        </td>
+                        <td class="border p-2">
+                            <select name="status_{{ attendee[0] }}" class="w-full border rounded p-1" {% if locked %}disabled{% endif %}>
+                                <option value="Present" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Present' %}selected{% endif %}>Present</option>
+                                <option value="Discharged" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Discharged' %}selected{% endif %}>Discharged</option>
+                                <option value="Absent" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Absent' %}selected{% endif %}>Absent</option>
+                                <option value="Stepdown" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Stepdown' %}selected{% endif %}>Stepdown</option>
+                                <option value="Individual Session" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Individual Session' %}selected{% endif %}>Individual Session</option>
+                            </select>
+                        </td>
+                        <td class="border p-2">
+                            <textarea name="notes_{{ attendee[0] }}" class="w-full border rounded p-1" {% if locked %}disabled{% endif %}>{{ attendance_records[attendee[0]][3] or '' }}</textarea>
+                        </td>
+                        <td class="border p-2">
+                            <select name="location_{{ attendee[0] }}" class="w-full border rounded p-1" {% if locked %}disabled{% endif %}>
+                                <option value="Office" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][4] == 'Office' %}selected{% endif %}>Office</option>
+                                <option value="Zoom" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][4] == 'Zoom' %}selected{% endif %}>Zoom</option>
+                            </select>
+                        </td>
+                    </tr>
                     {% endfor %}
-                </div>
+                </tbody>
+            </table>
+            {% if not locked %}
+            <div class="flex justify-end mt-4">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Submit</button>
             </div>
-            <div class="mb-4 flex items-center">
-                <input type="checkbox" name="absent" id="absent" class="mr-2">
-                <label for="absent" class="text-sm font-medium">Mark as Absent</label>
-            </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium">Time In</label>
-                <input type="time" name="time_in" class="w-full border rounded p-2">
-            </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium">Time Out (Optional)</label>
-                <input type="time" name="time_out" class="w-full border rounded p-2">
-            </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium">Engagement</label>
-                <input type="text" name="engagement" class="w-full border rounded p-2" placeholder="e.g., Yes, No, Partial">
-            </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium">Comments</label>
-                <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments"></textarea>
-            </div>
-            <div class="flex justify-end">
-                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Record Attendance</button>
-            </div>
+            {% endif %}
         </form>
         {% else %}
         <p class="text-red-600">No attendees assigned to this class. Please assign attendees via Manage Classes.</p>
         {% endif %}
     </div>
-
-    <!-- Attendance Records -->
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-lg font-bold mb-4">Attendance Records</h2>
-        {% if attendance_records %}
-        <table class="w-full border-collapse">
-            <thead>
-                <tr class="bg-gray-200">
-                    <th class="border p-2">Attendee</th>
-                    <th class="border p-2">Absent</th>
-                    <th class="border p-2">Time In</th>
-                    <th class="border p-2">Time Out</th>
-                    <th class="border p-2">Engagement</th>
-                    <th class="border p-2">Comments</th>
-                    <th class="border p-2">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for record in attendance_records %}
-                <tr>
-                    <td class="border p-2">{{ record[1] }}</td>
-                    <td class="border p-2">{{ 'Yes' if record[6] else 'No' }}</td>
-                    <td class="border p-2">{{ record[2] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[3] or 'Not set' }}</td>
-                    <td class="border p-2">{{ record[4] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[5] or 'N/A' }}</td>
-                    <td class="border p-2">
-                        <button onclick="openModal('editAttendanceModal{{ record[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
-                        <form method="POST" class="inline">
-                            <input type="hidden" name="action" value="update_timeout">
-                            <input type="hidden" name="attendance_id" value="{{ record[0] }}">
-                            <input type="time" name="time_out" class="border rounded p-1 mr-2" required>
-                            <button type="submit" class="bg-blue-600 text-white p-1 rounded">Update Time Out</button>
-                        </form>
-                    </td>
-                </tr>
-                <!-- Edit Attendance Modal -->
-                <div id="editAttendanceModal{{ record[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-                    <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-                        <h2 class="text-lg font-bold mb-4">Edit Attendance for {{ record[1] }}</h2>
-                        <form method="POST">
-                            <input type="hidden" name="action" value="update_attendance">
-                            <input type="hidden" name="attendance_id" value="{{ record[0] }}">
-                            <div class="mb-4 flex items-center">
-                                <input type="checkbox" name="absent" id="absent_{{ record[0] }}" class="mr-2" {% if record[6] %}checked{% endif %}>
-                                <label for="absent_{{ record[0] }}" class="text-sm font-medium">Mark as Absent</label>
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-medium">Time In</label>
-                                <input type="time" name="time_in" value="{{ record[2] or '' }}" class="w-full border rounded p-2">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-medium">Engagement</label>
-                                <input type="text" name="engagement" value="{{ record[4] or '' }}" class="w-full border rounded p-2" placeholder="e.g., Yes, No, Partial">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-medium">Comments</label>
-                                <textarea name="comments" class="w-full border rounded p-2" placeholder="Optional comments">{{ record[5] or '' }}</textarea>
-                            </div>
-                            <div class="flex justify-end">
-                                <button type="button" onclick="closeModal('editAttendanceModal{{ record[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p>No attendance records for this class.</p>
-        {% endif %}
-    </div>
-
-    <!-- JavaScript for Modal -->
-    <script>
-        function openModal(modalId) {
-            document.getElementById(modalId).classList.remove('hidden');
-        }
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.add('hidden');
-        }
-    </script>
 
     <div class="mt-4">
         <a href="{{ url_for('counselor_dashboard') }}" class="bg-gray-300 p-2 rounded">Back to Dashboard</a>

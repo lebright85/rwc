@@ -114,12 +114,13 @@
         <h4 class="text-sm font-medium mt-2">Assigned Attendees</h4>
         <ul class="list-disc ml-5">
             {% for attendee in class_attendees[class[0]] %}
-            <li>{{ attendee[1] }} ({{ attendee[2] }})
+            <li>
+                <a href="{{ url_for('attendee_profile', attendee_id=attendee[0]) }}" class="text-blue-600 hover:underline text-xs">{{ attendee[1] }} ({{ attendee[2] }})</a>
                 <form method="POST" id="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="inline">
                     <input type="hidden" name="action" value="unassign_attendee">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                    <button type="submit" form="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="text-red-600 text-xs">Unassign</button>
+                    <button type="submit" form="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="text-red-600 text-xs ml-2">Unassign</button>
                 </form>
             </li>
             {% endfor %}

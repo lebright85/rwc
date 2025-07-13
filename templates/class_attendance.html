@@ -11,7 +11,7 @@
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Attendance</h2>
         {% if attendees %}
-        <form method="POST">
+        <form method="POST" id="attendanceForm">
             <input type="hidden" name="action" value="submit_attendance">
             <table class="w-full border-collapse">
                 <thead>
@@ -29,7 +29,7 @@
                     {% for attendee in attendees %}
                     <tr>
                         <td class="border p-2">
-                            <input type="checkbox" name="present_{{ attendee[0] }}" id="present_{{ attendee[0] }}" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Present' %}checked{% endif %} {% if locked %}disabled{% endif %}>
+                            <input type="checkbox" name="present_{{ attendee[0] }}" id="present_{{ attendee[0] }}" {% if attendance_records[attendee[0]] and attendance_records[attendee[0]][2] == 'Present' %}checked{% endif %} {% if locked %}disabled{% endif %} class="mr-2">
                         </td>
                         <td class="border p-2">{{ attendee[1] }} ({{ attendee[2] }})</td>
                         <td class="border p-2">
@@ -62,7 +62,7 @@
             </table>
             {% if not locked %}
             <div class="flex justify-end mt-4">
-                <button type="submit" class="bg-blue-600 text-white p-2 rounded">Submit</button>
+                <button type="submit" form="attendanceForm" class="bg-blue-600 text-white p-2 rounded">Submit</button>
             </div>
             {% endif %}
         </form>

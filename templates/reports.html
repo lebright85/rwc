@@ -6,7 +6,7 @@
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Generate Report</h2>
-        <form method="POST">
+        <form method="POST" id="reportForm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Start Date</label>
@@ -61,7 +61,6 @@
                 Class: {{ data.class[1] }} ({{ data.class[2] }}, {{ data.class[3] }}, {{ data.class[4] }}, {{ data.class[5] }})
             </h3>
             <p class="text-sm mb-2">Counselor: {{ data.class[6] }}{% if data.class[7] %}, {{ data.class[7] }}{% endif %}</p>
-            <!-- Debug: Show number of attendees -->
             <p class="text-sm text-gray-500 mb-2">Debug: {{ data.attendees|length }} attendees found</p>
             {% if data.attendees %}
             <table class="w-full border-collapse">

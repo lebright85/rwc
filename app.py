@@ -351,6 +351,8 @@ def reports():
     attendees = c.fetchall()
     c.execute("SELECT id, full_name FROM users WHERE role = 'counselor' ORDER BY full_name")
     counselors = c.fetchall()
+    c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
+    groups = [row[0] for row in c.fetchall()]
     
     today = datetime.today()
     default_start_date = today.strftime('%Y-%m-%d')
@@ -360,15 +362,18 @@ def reports():
     class_id = request.form.get('class_id', 'all')
     attendee_id = request.form.get('attendee_id', 'all')
     counselor_id = request.form.get('counselor_id', 'all')
+    group_name = request.form.get('group_name', 'all')
     action = request.form.get('action', 'generate')
     
-    logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, action={action}")
+    logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, group_name={group_name}, action={action}")
     
     class_query = """
-        SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
+        SELECT DISTINCT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
                u.full_name AS counselor_name, u.credentials AS counselor_credentials
         FROM classes c
         JOIN users u ON c.counselor_id = u.id
+        LEFT JOIN class_attendees ca ON c.id = ca.class_id
+        LEFT JOIN attendees att ON ca.attendee_id = att.id
         WHERE 1=1
     """
     params = []
@@ -398,6 +403,9 @@ def reports():
         if counselor_id and counselor_id != 'all':
             class_query += " AND c.counselor_id = %s"
             params.append(int(counselor_id))
+        if group_name and group_name != 'all':
+            class_query += " AND att.\"group\" = %s"
+            params.append(group_name)
         
         c.execute(class_query, params)
         class_records = c.fetchall()
@@ -417,6 +425,9 @@ def reports():
             if attendee_id and attendee_id != 'all':
                 attendee_query += " AND a.attendee_id = %s"
                 attendee_params.append(int(attendee_id))
+            if group_name and group_name != 'all':
+                attendee_query += " AND att.\"group\" = %s"
+                attendee_params.append(group_name)
             
             c.execute(attendee_query, attendee_params)
             attendee_records = c.fetchall()
@@ -476,9 +487,9 @@ def reports():
             flash('Error generating report. Please try again.', 'error')
     
     conn.close()
-    return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, 
+    return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, groups=groups,
                            report_data=report_data, start_date=start_date, end_date=end_date, 
-                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id)
+                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_name=group_name)
 
 @app.route('/manage_users', methods=['GET', 'POST'])
 @login_required

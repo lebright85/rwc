@@ -6,7 +6,7 @@
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Filter Attendees</h2>
-        <form method="GET">
+        <form method="GET" id="filterAttendeesForm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Group</label>
@@ -31,12 +31,31 @@
     <div id="addAttendeeModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
         <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
             <h2 class="text-lg font-bold mb-4">Add Attendee</h2>
-            <form method="POST">
+            <form method="POST" id="addAttendeeForm">
                 <input type="hidden" name="action" value="add">
-                <!-- Form fields for add attendee -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Full Name</label>
+                    <input type="text" name="full_name" class="w-full border rounded p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Attendee ID</label>
+                    <input type="text" name="attendee_id" class="w-full border rounded p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Group</label>
+                    <input type="text" name="group" class="w-full border rounded p-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Group Details</label>
+                    <input type="text" name="group_details" class="w-full border rounded p-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Notes</label>
+                    <textarea name="notes" class="w-full border rounded p-2"></textarea>
+                </div>
                 <div class="flex justify-end">
                     <button type="button" onclick="closeModal('addAttendeeModal')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add</button>
+                    <button type="submit" form="addAttendeeForm" class="bg-blue-600 text-white p-2 rounded">Add</button>
                 </div>
             </form>
         </div>
@@ -53,10 +72,10 @@
         <p>Notes: {{ attendee[5] or 'N/A' }}</p>
         <div class="mt-2">
             <button onclick="openModal('editAttendeeModal{{ attendee[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
-            <form method="POST" class="inline">
+            <form method="POST" id="deleteAttendeeForm{{ attendee[0] }}" class="inline">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                <button type="submit" class="bg-red-600 text-white p-1 rounded">Delete</button>
+                <button type="submit" form="deleteAttendeeForm{{ attendee[0] }}" class="bg-red-600 text-white p-1 rounded">Delete</button>
             </form>
         </div>
 
@@ -64,13 +83,32 @@
         <div id="editAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
             <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
                 <h2 class="text-lg font-bold mb-4">Edit Attendee</h2>
-                <form method="POST">
+                <form method="POST" id="editAttendeeForm{{ attendee[0] }}">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                    <!-- Form fields with pre-filled values -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium">Full Name</label>
+                        <input type="text" name="full_name" value="{{ attendee[1] }}" class="w-full border rounded p-2" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium">Attendee ID</label>
+                        <input type="text" name="new_attendee_id" value="{{ attendee[2] }}" class="w-full border rounded p-2" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium">Group</label>
+                        <input type="text" name="group" value="{{ attendee[3] }}" class="w-full border rounded p-2">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium">Group Details</label>
+                        <input type="text" name="group_details" value="{{ attendee[4] }}" class="w-full border rounded p-2">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium">Notes</label>
+                        <textarea name="notes" class="w-full border rounded p-2">{{ attendee[5] }}</textarea>
+                    </div>
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('editAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                        <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
+                        <button type="submit" form="editAttendeeForm{{ attendee[0] }}" class="bg-blue-600 text-white p-2 rounded">Save</button>
                     </div>
                 </form>
             </div>

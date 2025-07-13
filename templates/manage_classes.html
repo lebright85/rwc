@@ -44,27 +44,27 @@
         <button onclick="openModal('addClassModal')" class="bg-blue-600 text-white p-2 rounded">Add Class</button>
     </div>
     <div id="addClassModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-            <h2 class="text-lg font-bold mb-4">Add Class</h2>
+        <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h2 class="text-lg font-bold mb-3">Add Class</h2>
             <form method="POST" id="addClassForm">
                 <input type="hidden" name="action" value="add">
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Group Name</label>
                     <input type="text" name="group_name" class="w-full border rounded p-2" required>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Class Name</label>
                     <input type="text" name="class_name" class="w-full border rounded p-2" required>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Date</label>
                     <input type="date" name="date" class="w-full border rounded p-2" required>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Group Hours</label>
                     <input type="text" name="group_hours" class="w-full border rounded p-2" required>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Counselor</label>
                     <select name="counselor_id" class="w-full border rounded p-2" required>
                         {% for counselor in counselors %}
@@ -72,29 +72,29 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Group Type</label>
                     <input type="text" name="group_type" class="w-full border rounded p-2">
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Notes</label>
                     <textarea name="notes" class="w-full border rounded p-2"></textarea>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Location</label>
                     <input type="text" name="location" class="w-full border rounded p-2">
                 </div>
-                <div class="mb-4 flex items-center">
+                <div class="mb-3 flex items-center">
                     <input type="checkbox" name="recurring" id="recurring_add" class="mr-2">
                     <label for="recurring_add" class="text-sm">Recurring</label>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="block text-sm font-medium">Frequency</label>
                     <select name="frequency" class="w-full border rounded p-2">
                         <option value="weekly">Weekly</option>
                     </select>
                 </div>
-                <div class="flex justify-end">
+                <div class="sticky bottom-0 bg-white pt-2 flex justify-end">
                     <button type="button" onclick="closeModal('addClassModal')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
                     <button type="submit" form="addClassForm" class="bg-blue-600 text-white p-2 rounded">Add</button>
                 </div>
@@ -143,28 +143,28 @@
 
         <!-- Edit Class Modal -->
         <div id="editClassModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-            <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-                <h2 class="text-lg font-bold mb-4">Edit Class</h2>
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-md max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-3">Edit Class</h2>
                 <form method="POST" id="editClassForm{{ class[0] }}">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Group Name</label>
                         <input type="text" name="group_name" value="{{ class[1] }}" class="w-full border rounded p-2" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Class Name</label>
                         <input type="text" name="class_name" value="{{ class[2] }}" class="w-full border rounded p-2" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Date</label>
                         <input type="date" name="date" value="{{ class[3] }}" class="w-full border rounded p-2" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Group Hours</label>
                         <input type="text" name="group_hours" value="{{ class[4] }}" class="w-full border rounded p-2" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Counselor</label>
                         <select name="counselor_id" class="w-full border rounded p-2" required>
                             {% for counselor in counselors %}
@@ -172,35 +172,35 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Group Type</label>
                         <input type="text" name="group_type" value="{{ class[6] }}" class="w-full border rounded p-2">
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Notes</label>
                         <textarea name="notes" class="w-full border rounded p-2">{{ class[7] }}</textarea>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Location</label>
                         <input type="text" name="location" value="{{ class[8] }}" class="w-full border rounded p-2">
                     </div>
-                    <div class="mb-4 flex items-center">
+                    <div class="mb-3 flex items-center">
                         <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] %}checked{% endif %} class="mr-2">
                         <label for="recurring_{{ class[0] }}" class="text-sm">Recurring</label>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Frequency</label>
                         <select name="frequency" class="w-full border rounded p-2">
                             <option value="weekly" {% if class[10] == 'weekly' %}selected{% endif %}>Weekly</option>
                         </select>
                     </div>
-                    <div class="mb-4 flex items-center">
+                    <div class="mb-3 flex items-center">
                         <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}" class="mr-2">
                         <label for="propagate_{{ class[0] }}" class="text-sm">Propagate to future recurring classes</label>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Assigned Attendees</label>
-                        <div class="grid grid-cols-1 gap-2">
+                        <div class="max-h-48 overflow-y-auto border rounded p-2">
                             {% for attendee in attendees %}
                             <div class="flex items-center">
                                 <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}_{{ class[0] }}" {% if attendee[0] in class_attendees[class[0]]|map(attribute='0') %}checked{% endif %} class="mr-2">
@@ -209,7 +209,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                    <div class="flex justify-end">
+                    <div class="sticky bottom-0 bg-white pt-2 flex justify-end">
                         <button type="button" onclick="closeModal('editClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
                         <button type="submit" form="editClassForm{{ class[0] }}" class="bg-blue-600 text-white p-2 rounded">Save</button>
                     </div>
@@ -219,12 +219,12 @@
 
         <!-- Assign Attendee Modal -->
         <div id="assignAttendeeModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-            <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
-                <h2 class="text-lg font-bold mb-4">Assign Attendee to Class</h2>
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm">
+                <h2 class="text-lg font-bold mb-3">Assign Attendee to Class</h2>
                 <form method="POST" id="assignAttendeeForm{{ class[0] }}">
                     <input type="hidden" name="action" value="assign_attendee">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Attendee</label>
                         <select name="attendee_id" class="w-full border rounded p-2" required>
                             {% for attendee in attendees %}
@@ -242,12 +242,12 @@
 
         <!-- Assign Group Modal -->
         <div id="assignGroupModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-            <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
-                <h2 class="text-lg font-bold mb-4">Assign Group to Class</h2>
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm">
+                <h2 class="text-lg font-bold mb-3">Assign Group to Class</h2>
                 <form method="POST" id="assignGroupForm{{ class[0] }}">
                     <input type="hidden" name="action" value="assign_group">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="block text-sm font-medium">Group</label>
                         <select name="group_name" class="w-full border rounded p-2" required>
                             {% for group in groups %}

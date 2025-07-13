@@ -671,7 +671,7 @@ def manage_classes():
                     for future_id in future_ids:
                         c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s WHERE id = %s",
                                   (group_name, class_name, group_hours, counselor_id, group_type, notes, location, future_id))
-                        # Propagate attendees
+                        # Optionally propagate attendees
                         for attendee_id in attendee_ids:
                             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                                       (future_id, attendee_id))

@@ -6,7 +6,7 @@
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Filter Classes</h2>
-        <form method="GET">
+        <form method="GET" id="filterClassesForm">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Group</label>
@@ -46,7 +46,7 @@
     <div id="addClassModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
         <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
             <h2 class="text-lg font-bold mb-4">Add Class</h2>
-            <form method="POST">
+            <form method="POST" id="addClassForm">
                 <input type="hidden" name="action" value="add">
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Group Name</label>
@@ -85,8 +85,8 @@
                     <input type="text" name="location" class="w-full border rounded p-2">
                 </div>
                 <div class="mb-4 flex items-center">
-                    <input type="checkbox" name="recurring" id="recurring">
-                    <label for="recurring" class="ml-2 text-sm">Recurring</label>
+                    <input type="checkbox" name="recurring" id="recurring_add" class="mr-2">
+                    <label for="recurring_add" class="text-sm">Recurring</label>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Frequency</label>
@@ -96,7 +96,7 @@
                 </div>
                 <div class="flex justify-end">
                     <button type="button" onclick="closeModal('addClassModal')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add</button>
+                    <button type="submit" form="addClassForm" class="bg-blue-600 text-white p-2 rounded">Add</button>
                 </div>
             </form>
         </div>
@@ -115,28 +115,29 @@
         <ul class="list-disc ml-5">
             {% for attendee in class_attendees[class[0]] %}
             <li>{{ attendee[1] }} ({{ attendee[2] }})
-                <form method="POST" class="inline">
+                <form method="POST" id="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="inline">
                     <input type="hidden" name="action" value="unassign_attendee">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                    <button type="submit" class="text-red-600 text-sm">Unassign</button>
-                </li>
+                    <button type="submit" form="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="text-red-600 text-sm">Unassign</button>
+                </form>
+            </li>
             {% endfor %}
         </ul>
         <div class="mt-2">
             <button onclick="openModal('editClassModal{{ class[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
-            <form method="POST" class="inline">
+            <form method="POST" id="deleteForm{{ class[0] }}" class="inline">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="class_id" value="{{ class[0] }}">
-                <button type="submit" class="bg-red-600 text-white p-1 rounded mr-2">Delete</button>
+                <button type="submit" form="deleteForm{{ class[0] }}" class="bg-red-600 text-white p-1 rounded mr-2">Delete</button>
             </form>
             <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2">Assign Attendee</button>
             <button onclick="openModal('assignGroupModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2">Assign Group</button>
-            <form method="POST" class="inline">
+            <form method="POST" id="lockForm{{ class[0] }}" class="inline">
                 <input type="hidden" name="action" value="toggle_lock">
                 <input type="hidden" name="class_id" value="{{ class[0] }}">
                 <input type="hidden" name="locked" value="{{ 'true' if not class[12] else 'false' }}">
-                <button type="submit" class="bg-yellow-600 text-white p-1 rounded">{{ 'Lock' if not class[12] else 'Unlock' }}</button>
+                <button type="submit" form="lockForm{{ class[0] }}" class="bg-yellow-600 text-white p-1 rounded">{{ 'Lock' if not class[12] else 'Unlock' }}</button>
             </form>
         </div>
 
@@ -144,7 +145,7 @@
         <div id="editClassModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
             <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
                 <h2 class="text-lg font-bold mb-4">Edit Class</h2>
-                <form method="POST">
+                <form method="POST" id="editClassForm{{ class[0] }}">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <div class="mb-4">
@@ -184,8 +185,8 @@
                         <input type="text" name="location" value="{{ class[8] }}" class="w-full border rounded p-2">
                     </div>
                     <div class="mb-4 flex items-center">
-                        <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] %}checked{% endif %}>
-                        <label for="recurring_{{ class[0] }}" class="ml-2 text-sm">Recurring</label>
+                        <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] %}checked{% endif %} class="mr-2">
+                        <label for="recurring_{{ class[0] }}" class="text-sm">Recurring</label>
                     </div>
                     <div class="mb-4">
                         <label class="block text-sm font-medium">Frequency</label>
@@ -194,15 +195,15 @@
                         </select>
                     </div>
                     <div class="mb-4 flex items-center">
-                        <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}">
-                        <label for="propagate_{{ class[0] }}" class="ml-2 text-sm">Propagate to future recurring classes</label>
+                        <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}" class="mr-2">
+                        <label for="propagate_{{ class[0] }}" class="text-sm">Propagate to future recurring classes</label>
                     </div>
                     <div class="mb-4">
                         <label class="block text-sm font-medium">Assigned Attendees</label>
                         <div class="grid grid-cols-1 gap-2">
                             {% for attendee in attendees %}
                             <div class="flex items-center">
-                                <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}_{{ class[0] }}" {% if attendee[0] in class_attendees[class[0]]|map(attribute='0') %}checked{% endif %}>
+                                <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}_{{ class[0] }}" {% if attendee[0] in class_attendees[class[0]]|map(attribute='0') %}checked{% endif %} class="mr-2">
                                 <label for="attendee_{{ attendee[0] }}_{{ class[0] }}" class="text-sm">{{ attendee[1] }} ({{ attendee[2] }})</label>
                             </div>
                             {% endfor %}
@@ -210,7 +211,7 @@
                     </div>
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('editClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                        <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
+                        <button type="submit" form="editClassForm{{ class[0] }}" class="bg-blue-600 text-white p-2 rounded">Save</button>
                     </div>
                 </form>
             </div>
@@ -220,7 +221,7 @@
         <div id="assignAttendeeModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
             <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
                 <h2 class="text-lg font-bold mb-4">Assign Attendee to Class</h2>
-                <form method="POST">
+                <form method="POST" id="assignAttendeeForm{{ class[0] }}">
                     <input type="hidden" name="action" value="assign_attendee">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <div class="mb-4">
@@ -233,7 +234,7 @@
                     </div>
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('assignAttendeeModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                        <button type="submit" class="bg-blue-600 text-white p-2 rounded">Assign</button>
+                        <button type="submit" form="assignAttendeeForm{{ class[0] }}" class="bg-blue-600 text-white p-2 rounded">Assign</button>
                     </div>
                 </form>
             </div>
@@ -243,7 +244,7 @@
         <div id="assignGroupModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
             <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
                 <h2 class="text-lg font-bold mb-4">Assign Group to Class</h2>
-                <form method="POST">
+                <form method="POST" id="assignGroupForm{{ class[0] }}">
                     <input type="hidden" name="action" value="assign_group">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <div class="mb-4">
@@ -256,7 +257,7 @@
                     </div>
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('assignGroupModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                        <button type="submit" class="bg-blue-600 text-white p-2 rounded">Assign</button>
+                        <button type="submit" form="assignGroupForm{{ class[0] }}" class="bg-blue-600 text-white p-2 rounded">Assign</button>
                     </div>
                 </form>
             </div>

@@ -607,6 +607,7 @@ def manage_classes():
 
     if request.method == 'POST':
         action = request.form.get('action')
+        logger.info(f"Received action in manage_classes: {action}")
         if action == 'add':
             group_name = request.form['group_name']
             class_name = request.form['class_name']
@@ -639,6 +640,7 @@ def manage_classes():
                         current_date += timedelta(days=7)
                     conn.commit()
             except psycopg2.IntegrityError:
+                logger.error(f"IntegrityError adding class: {group_name}, {class_name}")
                 flash('Class creation failed due to duplicate or invalid data')
         elif action == 'edit':
             class_id = request.form['class_id']
@@ -663,6 +665,7 @@ def manage_classes():
                     c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                               (class_id, attendee_id))
                 conn.commit()
+                logger.info(f"Class {class_id} updated successfully")
                 flash('Class updated successfully')
                 if propagate and recurring:
                     c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s",
@@ -676,8 +679,10 @@ def manage_classes():
                             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                                       (future_id, attendee_id))
                     conn.commit()
+                    logger.info(f"Propagated changes to {len(future_ids)} future recurring classes")
                     flash('Changes propagated to future recurring classes')
             except psycopg2.IntegrityError:
+                logger.error(f"IntegrityError updating class: {class_id}")
                 flash('Class update failed due to duplicate or invalid data')
         elif action == 'delete':
             class_id = request.form['class_id']
@@ -686,6 +691,7 @@ def manage_classes():
                 c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
                 c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
                 conn.commit()
+                logger.info(f"Class {class_id} deleted successfully")
                 flash('Class deleted successfully')
             except psycopg2.Error as e:
                 logger.error(f"Error deleting class: {e}")
@@ -697,14 +703,17 @@ def manage_classes():
                 c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)",
                           (class_id, attendee_id))
                 conn.commit()
+                logger.info(f"Attendee {attendee_id} assigned to class {class_id}")
                 flash('Attendee assigned successfully')
             except psycopg2.IntegrityError:
+                logger.warning(f"Attendee {attendee_id} already assigned to class {class_id}")
                 flash('Attendee already assigned to this class')
         elif action == 'unassign_attendee':
             class_id = request.form['class_id']
             attendee_id = request.form['attendee_id']
             c.execute("DELETE FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
             conn.commit()
+            logger.info(f"Attendee {attendee_id} unassigned from class {class_id}")
             flash('Attendee unassigned successfully')
         elif action == 'assign_group':
             class_id = request.form['class_id']
@@ -713,6 +722,7 @@ def manage_classes():
                 c.execute("SELECT id FROM attendees WHERE \"group\" = %s", (group_name,))
                 attendee_ids = [row[0] for row in c.fetchall()]
                 if not attendee_ids:
+                    logger.warning(f"No attendees found in group {group_name} for class {class_id}")
                     flash(f'No attendees found in group {group_name}', 'error')
                 else:
                     assigned_count = 0
@@ -725,8 +735,10 @@ def manage_classes():
                             logger.error(f"Error assigning attendee {attendee_id} to class {class_id}: {e}")
                     conn.commit()
                     if assigned_count > 0:
+                        logger.info(f"Assigned {assigned_count} attendees from group {group_name} to class {class_id}")
                         flash(f'Assigned {assigned_count} attendees from group {group_name} to class', 'success')
                     else:
+                        logger.info(f"No new attendees assigned from group {group_name} to class {class_id}")
                         flash(f'No new attendees assigned from group {group_name} (already assigned or no attendees)', 'info')
             except psycopg2.Error as e:
                 logger.error(f"Error assigning group {group_name} to class {class_id}: {e}")
@@ -737,7 +749,11 @@ def manage_classes():
             locked = request.form['locked'] == 'true'
             c.execute("UPDATE classes SET locked = %s WHERE id = %s", (locked, class_id))
             conn.commit()
+            logger.info(f"Class {class_id} {'locked' if locked else 'unlocked'}")
             flash(f'Class {"locked" if locked else "unlocked"} successfully')
+        else:
+            logger.warning(f"Unknown action received: {action}")
+            flash('Invalid action', 'error')
     
     c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
     counselors = c.fetchall()
@@ -940,6 +956,7 @@ def class_attendance(class_id):
                     c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, attendance_status, notes, location) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                               (class_id, attendee_id, time_in, time_out, attendance_status, notes, location))
             conn.commit()
+            logger.info(f"Attendance submitted for class_id {class_id}")
             flash('Attendance submitted successfully')
         
         conn.close()

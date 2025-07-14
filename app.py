@@ -809,6 +809,9 @@ def manage_attendees():
     conn = get_db_connection()
     c = conn.cursor()
     group_filter = request.args.get('group_filter', 'all')
+    name_filter = request.args.get('name_filter', '').strip()
+    logger.info(f"Manage attendees filters: group_filter={group_filter}, name_filter={name_filter}")
+
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add':
@@ -851,18 +854,24 @@ def manage_attendees():
             except psycopg2.Error as e:
                 logger.error(f"Error deleting attendee: {e}")
                 flash('An error occurred while deleting the attendee')
+    
     attendees_query = "SELECT id, full_name, attendee_id, \"group\", group_details, notes FROM attendees WHERE 1=1"
     params = []
     if group_filter != 'all':
         attendees_query += " AND \"group\" = %s"
         params.append(group_filter)
+    if name_filter:
+        attendees_query += " AND full_name ILIKE %s"
+        params.append(f'%{name_filter}%')
     attendees_query += " ORDER BY full_name ASC"
     c.execute(attendees_query, params)
     attendees = c.fetchall()
+    logger.info(f"Retrieved {len(attendees)} attendees with filters: group_filter={group_filter}, name_filter={name_filter}")
+    
     c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
     groups = [row[0] for row in c.fetchall()]
     conn.close()
-    return render_template('manage_attendees.html', attendees=attendees, groups=groups, group_filter=group_filter)
+    return render_template('manage_attendees.html', attendees=attendees, groups=groups, group_filter=group_filter, name_filter=name_filter)
 
 @app.route('/logout')
 @login_required

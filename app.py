@@ -93,7 +93,6 @@ def init_db():
                     location TEXT,
                     recurring INTEGER NOT NULL DEFAULT 0,
                     frequency TEXT,
-                    locked BOOLEAN NOT NULL DEFAULT FALSE,
                     FOREIGN KEY (counselor_id) REFERENCES users(id)
                 )''')
                 logger.info("Classes table created")
@@ -101,7 +100,7 @@ def init_db():
                     id SERIAL PRIMARY KEY,
                     full_name TEXT NOT NULL,
                     attendee_id TEXT UNIQUE NOT NULL,
-                    "group" TEXT,
+                    group TEXT,
                     group_details TEXT,
                     notes TEXT
                 )''')
@@ -323,7 +322,7 @@ def attendee_profile(attendee_id):
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, full_name, attendee_id, \"group\", group_details, notes FROM attendees WHERE id = %s",
+    c.execute("SELECT id, full_name, attendee_id, group_details, notes FROM attendees WHERE id = %s",
               (attendee_id,))
     attendee = c.fetchone()
     if not attendee:
@@ -335,8 +334,14 @@ def attendee_profile(attendee_id):
     c.execute("SELECT c.class_name, a.time_in, a.time_out, a.attendance_status, a.notes, a.location FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
               (attendee_id,))
     attendance_records = c.fetchall()
+    c.execute("""
+        SELECT string_agg(g.name, ', ') FROM groups g
+        JOIN attendee_groups ag ON g.id = ag.group_id
+        WHERE ag.attendee_id = %s
+    """, (attendee_id,))
+    groups_str = c.fetchone()[0] or 'N/A'
     conn.close()
-    return render_template('attendee_profile.html', attendee=attendee, assigned_classes=assigned_classes, attendance_records=attendance_records)
+    return render_template('attendee_profile.html', attendee=attendee, assigned_classes=assigned_classes, attendance_records=attendance_records, groups_str=groups_str)
 
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
@@ -351,8 +356,8 @@ def reports():
     attendees = c.fetchall()
     c.execute("SELECT id, full_name FROM users WHERE role = 'counselor' ORDER BY full_name")
     counselors = c.fetchall()
-    c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
-    groups = [row[0] for row in c.fetchall()]
+    c.execute("SELECT id, name FROM groups ORDER BY name")
+    groups = c.fetchall()
     
     today = datetime.today()
     default_start_date = today.strftime('%Y-%m-%d')
@@ -362,10 +367,10 @@ def reports():
     class_id = request.form.get('class_id', 'all')
     attendee_id = request.form.get('attendee_id', 'all')
     counselor_id = request.form.get('counselor_id', 'all')
-    group_name = request.form.get('group_name', 'all')
+    group_id = request.form.get('group_id', 'all')
     action = request.form.get('action', 'generate')
     
-    logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, group_name={group_name}, action={action}")
+    logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, group_id={group_id}, action={action}")
     
     class_query = """
         SELECT DISTINCT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
@@ -374,6 +379,7 @@ def reports():
         JOIN users u ON c.counselor_id = u.id
         LEFT JOIN class_attendees ca ON c.id = ca.class_id
         LEFT JOIN attendees att ON ca.attendee_id = att.id
+        LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
         WHERE 1=1
     """
     params = []
@@ -403,9 +409,9 @@ def reports():
         if counselor_id and counselor_id != 'all':
             class_query += " AND c.counselor_id = %s"
             params.append(int(counselor_id))
-        if group_name and group_name != 'all':
-            class_query += " AND att.\"group\" = %s"
-            params.append(group_name)
+        if group_id and group_id != 'all':
+            class_query += " AND ag.group_id = %s"
+            params.append(int(group_id))
         
         c.execute(class_query, params)
         class_records = c.fetchall()
@@ -415,20 +421,22 @@ def reports():
         for class_record in class_records:
             class_id = class_record[0]
             attendee_query = """
-                SELECT att.full_name, att.attendee_id, att."group",
+                SELECT att.full_name, att.attendee_id, string_agg(g.name, ', ') AS "groups",
                        a.attendance_status, a.time_in, a.time_out, a.notes, a.location
                 FROM attendance a
                 JOIN attendees att ON a.attendee_id = att.id
+                LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
+                LEFT JOIN groups g ON ag.group_id = g.id
                 WHERE a.class_id = %s
             """
             attendee_params = [class_id]
             if attendee_id and attendee_id != 'all':
                 attendee_query += " AND a.attendee_id = %s"
                 attendee_params.append(int(attendee_id))
-            if group_name and group_name != 'all':
-                attendee_query += " AND att.\"group\" = %s"
-                attendee_params.append(group_name)
-            
+            if group_id and group_id != 'all':
+                attendee_query += " AND ag.group_id = %s"
+                attendee_params.append(int(group_id))
+            attendee_query += " GROUP BY a.id, att.id"
             c.execute(attendee_query, attendee_params)
             attendee_records = c.fetchall()
             logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")
@@ -446,7 +454,7 @@ def reports():
                 writer = csv.writer(output)
                 writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
                                  'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
-                                 'Attendee Group', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
+                                 'Groups', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
                 for data in report_data:
                     class_record = data['class']
                     class_info = [
@@ -460,7 +468,7 @@ def reports():
                             row = class_info if idx == 0 else ['', '', '', '', '', '', '']
                             row += [
                                 attendee[0] or 'No attendees', attendee[1] or '',
-                                attendee[2] or '', attendee[3] or 'Present',
+                                attendee[2] or 'N/A', attendee[3] or 'Present',
                                 attendee[4] or '', attendee[5] or '',
                                 attendee[6] or '', attendee[7] or ''
                             ]
@@ -489,7 +497,48 @@ def reports():
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, groups=groups,
                            report_data=report_data, start_date=start_date, end_date=end_date, 
-                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_name=group_name)
+                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_id=group_id)
+
+@app.route('/manage_groups', methods=['GET', 'POST'])
+@login_required
+def manage_groups():
+    if current_user.role != 'admin':
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            name = request.form['name']
+            try:
+                c.execute("INSERT INTO groups (name) VALUES (%s)", (name,))
+                conn.commit()
+                flash('Group added successfully')
+            except psycopg2.IntegrityError:
+                flash('Group name already exists')
+        elif action == 'edit':
+            group_id = request.form['group_id']
+            name = request.form['name']
+            try:
+                c.execute("UPDATE groups SET name = %s WHERE id = %s", (name, group_id))
+                conn.commit()
+                flash('Group updated successfully')
+            except psycopg2.IntegrityError:
+                flash('Group name already exists')
+        elif action == 'delete':
+            group_id = request.form['group_id']
+            c.execute("SELECT COUNT(*) FROM attendee_groups WHERE group_id = %s", (group_id,))
+            count = c.fetchone()[0]
+            if count > 0:
+                flash('Cannot delete group because it is assigned to attendees')
+            else:
+                c.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+                conn.commit()
+                flash('Group deleted successfully')
+    c.execute("SELECT id, name FROM groups ORDER BY name")
+    groups = c.fetchall()
+    conn.close()
+    return render_template('manage_groups.html', groups=groups)
 
 @app.route('/manage_users', methods=['GET', 'POST'])
 @login_required
@@ -809,20 +858,22 @@ def manage_attendees():
     conn = get_db_connection()
     c = conn.cursor()
     group_filter = request.args.get('group_filter', 'all')
-    name_filter = request.args.get('name_filter', '').strip()
-    logger.info(f"Manage attendees filters: group_filter={group_filter}, name_filter={name_filter}")
-
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add':
             full_name = request.form['full_name']
             attendee_id = request.form['attendee_id']
-            group = request.form['group']
             group_details = request.form['group_details']
             notes = request.form['notes']
             try:
-                c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s)",
-                          (full_name, attendee_id, group, group_details, notes))
+                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
+                          (full_name, attendee_id, group_details, notes))
+                new_attendee_id = c.fetchone()[0]
+                conn.commit()
+                group_ids = request.form.getlist('group_ids')
+                for group_id in group_ids:
+                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (new_attendee_id, group_id))
                 conn.commit()
                 flash('Attendee added successfully')
             except psycopg2.IntegrityError:
@@ -831,12 +882,17 @@ def manage_attendees():
             attendee_id = request.form['attendee_id']
             full_name = request.form['full_name']
             new_attendee_id = request.form['new_attendee_id']
-            group = request.form['group']
             group_details = request.form['group_details']
             notes = request.form['notes']
             try:
-                c.execute("UPDATE attendees SET full_name = %s, attendee_id = %s, \"group\" = %s, group_details = %s, notes = %s WHERE id = %s",
-                          (full_name, new_attendee_id, group, group_details, notes, attendee_id))
+                c.execute("UPDATE attendees SET full_name = %s, attendee_id = %s, group_details = %s, notes = %s WHERE id = %s",
+                          (full_name, new_attendee_id, group_details, notes, attendee_id))
+                conn.commit()
+                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
+                group_ids = request.form.getlist('group_ids')
+                for group_id in group_ids:
+                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (attendee_id, group_id))
                 conn.commit()
                 flash('Attendee updated successfully')
             except psycopg2.IntegrityError:
@@ -846,6 +902,7 @@ def manage_attendees():
             try:
                 c.execute("DELETE FROM class_attendees WHERE attendee_id = %s", (attendee_id,))
                 c.execute("DELETE FROM attendance WHERE attendee_id = %s", (attendee_id,))
+                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
                 c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
                 conn.commit()
                 flash('Attendee deleted successfully')
@@ -854,24 +911,30 @@ def manage_attendees():
             except psycopg2.Error as e:
                 logger.error(f"Error deleting attendee: {e}")
                 flash('An error occurred while deleting the attendee')
-    
-    attendees_query = "SELECT id, full_name, attendee_id, \"group\", group_details, notes FROM attendees WHERE 1=1"
+    attendees_query = """
+        SELECT a.id, a.full_name, a.attendee_id, a.group_details, a.notes
+        FROM attendees a
+        WHERE 1=1
+    """
     params = []
     if group_filter != 'all':
-        attendees_query += " AND \"group\" = %s"
+        attendees_query += " AND EXISTS (SELECT 1 FROM attendee_groups ag JOIN groups g ON ag.group_id = g.id WHERE ag.attendee_id = a.id AND g.name = %s)"
         params.append(group_filter)
-    if name_filter:
-        attendees_query += " AND full_name ILIKE %s"
-        params.append(f'%{name_filter}%')
-    attendees_query += " ORDER BY full_name ASC"
+    attendees_query += " ORDER BY a.full_name ASC"
     c.execute(attendees_query, params)
     attendees = c.fetchall()
-    logger.info(f"Retrieved {len(attendees)} attendees with filters: group_filter={group_filter}, name_filter={name_filter}")
-    
-    c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
-    groups = [row[0] for row in c.fetchall()]
+    c.execute("SELECT id, name FROM groups ORDER BY name")
+    groups = c.fetchall()
+    attendee_groups = {}
+    for attendee in attendees:
+        c.execute("""
+            SELECT g.id FROM groups g
+            JOIN attendee_groups ag ON g.id = ag.group_id
+            WHERE ag.attendee_id = %s
+        """, (attendee[0],))
+        attendee_groups[attendee[0]] = [row[0] for row in c.fetchall()]
     conn.close()
-    return render_template('manage_attendees.html', attendees=attendees, groups=groups, group_filter=group_filter, name_filter=name_filter)
+    return render_template('manage_attendees.html', attendees=attendees, groups=groups, attendee_groups=attendee_groups, group_filter=group_filter)
 
 @app.route('/logout')
 @login_required

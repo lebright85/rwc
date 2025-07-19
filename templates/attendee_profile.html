@@ -5,9 +5,9 @@
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Attendee Details</h2>
         <p><strong>Attendee ID:</strong> {{ attendee[2] }}</p>
-        <p><strong>Group:</strong> {{ attendee[3] or 'N/A' }}</p>
-        <p><strong>Group Details:</strong> {{ attendee[4] or 'N/A' }}</p>
-        <p><strong>Notes:</strong> {{ attendee[5] or 'N/A' }}</p>
+        <p><strong>Groups:</strong> {{ groups_str }}</p>
+        <p><strong>Group Details:</strong> {{ attendee[3] or 'N/A' }}</p>
+        <p><strong>Notes:</strong> {{ attendee[4] or 'N/A' }}</p>
         <div class="mt-4">
             <a href="{{ url_for('manage_attendees') }}" class="bg-gray-300 p-2 rounded">Back to Attendees</a>
         </div>

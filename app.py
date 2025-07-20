@@ -66,6 +66,8 @@ def init_db():
                 c = conn.cursor()
                 c.execute("DROP TABLE IF EXISTS attendance CASCADE")
                 c.execute("DROP TABLE IF EXISTS class_attendees CASCADE")
+                c.execute("DROP TABLE IF EXISTS attendee_groups CASCADE")
+                c.execute("DROP TABLE IF EXISTS groups CASCADE")
                 c.execute("DROP TABLE IF EXISTS attendees CASCADE")
                 c.execute("DROP TABLE IF EXISTS classes CASCADE")
                 c.execute("DROP TABLE IF EXISTS users CASCADE")
@@ -93,18 +95,31 @@ def init_db():
                     location TEXT,
                     recurring INTEGER NOT NULL DEFAULT 0,
                     frequency TEXT,
+                    locked BOOLEAN NOT NULL DEFAULT FALSE,
                     FOREIGN KEY (counselor_id) REFERENCES users(id)
                 )''')
                 logger.info("Classes table created")
+                c.execute('''CREATE TABLE groups (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL
+                )''')
+                logger.info("Groups table created")
                 c.execute('''CREATE TABLE attendees (
                     id SERIAL PRIMARY KEY,
                     full_name TEXT NOT NULL,
                     attendee_id TEXT UNIQUE NOT NULL,
-                    group TEXT,
                     group_details TEXT,
                     notes TEXT
                 )''')
                 logger.info("Attendees table created")
+                c.execute('''CREATE TABLE attendee_groups (
+                    attendee_id INTEGER,
+                    group_id INTEGER,
+                    PRIMARY KEY (attendee_id, group_id),
+                    FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+                )''')
+                logger.info("Attendee_groups table created")
                 c.execute('''CREATE TABLE attendance (
                     id SERIAL PRIMARY KEY,
                     class_id INTEGER,
@@ -137,6 +152,16 @@ def init_db():
                 counselor2_id = c.fetchone()[0]
                 logger.info("Sample users inserted")
 
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group A',))
+                group_a_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group B',))
+                group_b_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group C',))
+                group_c_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group D',))
+                group_d_id = c.fetchone()[0]
+                logger.info("Sample groups inserted")
+
                 today = '2025-05-21'
                 tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
@@ -154,12 +179,14 @@ def init_db():
                 coping_id = c.fetchone()[0]
                 logger.info("Sample classes inserted")
 
-                c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                          ('John Smith', 'ATT001', 'Group A', 'Morning Session', 'Requires extra support'))
+                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
+                          ('John Smith', 'ATT001', 'Morning Session', 'Requires extra support'))
                 attendee_id = c.fetchone()[0]
-                c.execute("INSERT INTO attendees (full_name, attendee_id, \"group\", group_details, notes) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                          ('Jane Doe', 'ATT002', 'Group A', 'Morning Session', 'Good engagement'))
+                c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s)", (attendee_id, group_a_id))
+                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
+                          ('Jane Doe', 'ATT002', 'Morning Session', 'Good engagement'))
                 attendee_id2 = c.fetchone()[0]
+                c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s)", (attendee_id2, group_a_id))
                 logger.info("Sample attendees inserted")
 
                 c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, attendance_status, notes, location) VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -841,100 +868,14 @@ def manage_classes():
     classes = c.fetchall()
     c.execute("SELECT id, full_name, attendee_id FROM attendees")
     attendees = c.fetchall()
-    c.execute("SELECT DISTINCT \"group\" FROM attendees WHERE \"group\" IS NOT NULL ORDER BY \"group\"")
-    groups = [row[0] for row in c.fetchall()]
+    c.execute("SELECT id, name FROM groups ORDER BY name")
+    groups = c.fetchall()
     class_attendees = {}
     for class_ in classes:
         c.execute("SELECT a.id, a.full_name, a.attendee_id FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s", (class_[0],))
         class_attendees[class_[0]] = c.fetchall()
     conn.close()
     return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date)
-
-@app.route('/manage_attendees', methods=['GET', 'POST'])
-@login_required
-def manage_attendees():
-    if current_user.role != 'admin':
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    group_filter = request.args.get('group_filter', 'all')
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'add':
-            full_name = request.form['full_name']
-            attendee_id = request.form['attendee_id']
-            group_details = request.form['group_details']
-            notes = request.form['notes']
-            try:
-                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
-                          (full_name, attendee_id, group_details, notes))
-                new_attendee_id = c.fetchone()[0]
-                conn.commit()
-                group_ids = request.form.getlist('group_ids')
-                for group_id in group_ids:
-                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (new_attendee_id, group_id))
-                conn.commit()
-                flash('Attendee added successfully')
-            except psycopg2.IntegrityError:
-                flash('Attendee ID already exists')
-        elif action == 'edit':
-            attendee_id = request.form['attendee_id']
-            full_name = request.form['full_name']
-            new_attendee_id = request.form['new_attendee_id']
-            group_details = request.form['group_details']
-            notes = request.form['notes']
-            try:
-                c.execute("UPDATE attendees SET full_name = %s, attendee_id = %s, group_details = %s, notes = %s WHERE id = %s",
-                          (full_name, new_attendee_id, group_details, notes, attendee_id))
-                conn.commit()
-                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
-                group_ids = request.form.getlist('group_ids')
-                for group_id in group_ids:
-                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (attendee_id, group_id))
-                conn.commit()
-                flash('Attendee updated successfully')
-            except psycopg2.IntegrityError:
-                flash('Attendee ID already exists')
-        elif action == 'delete':
-            attendee_id = request.form['attendee_id']
-            try:
-                c.execute("DELETE FROM class_attendees WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendance WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
-                conn.commit()
-                flash('Attendee deleted successfully')
-            except psycopg2.errors.ForeignKeyViolation:
-                flash('Cannot delete attendee because they are referenced in other records')
-            except psycopg2.Error as e:
-                logger.error(f"Error deleting attendee: {e}")
-                flash('An error occurred while deleting the attendee')
-    attendees_query = """
-        SELECT a.id, a.full_name, a.attendee_id, a.group_details, a.notes
-        FROM attendees a
-        WHERE 1=1
-    """
-    params = []
-    if group_filter != 'all':
-        attendees_query += " AND EXISTS (SELECT 1 FROM attendee_groups ag JOIN groups g ON ag.group_id = g.id WHERE ag.attendee_id = a.id AND g.name = %s)"
-        params.append(group_filter)
-    attendees_query += " ORDER BY a.full_name ASC"
-    c.execute(attendees_query, params)
-    attendees = c.fetchall()
-    c.execute("SELECT id, name FROM groups ORDER BY name")
-    groups = c.fetchall()
-    attendee_groups = {}
-    for attendee in attendees:
-        c.execute("""
-            SELECT g.id FROM groups g
-            JOIN attendee_groups ag ON g.id = ag.group_id
-            WHERE ag.attendee_id = %s
-        """, (attendee[0],))
-        attendee_groups[attendee[0]] = [row[0] for row in c.fetchall()]
-    conn.close()
-    return render_template('manage_attendees.html', attendees=attendees, groups=groups, attendee_groups=attendee_groups, group_filter=group_filter)
 
 @app.route('/logout')
 @login_required

@@ -103,7 +103,7 @@
                     <label class="block text-sm font-medium">Groups</label>
                     <select name="group_ids" multiple class="w-full border rounded p-2">
                         {% for group in groups %}
-                        <option value="{{ group[0] }}" {% if group[0] in attendee_groups[attendee[0]] %}selected{% endif %}>{{ group[1] }}</option>
+                        <option value="{{ group[0] }}" {% if group[0] in attendee_groups[attendee[0]]|map(attribute='0') %}selected{% endif %}>{{ group[1] }}</option>
                         {% endfor %}
                     </select>
                 </div>

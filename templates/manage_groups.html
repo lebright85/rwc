@@ -5,20 +5,20 @@
 
     <!-- Add Group Modal -->
     <div class="mb-6">
-        <button onclick="openModal('addGroupModal')" class="bg-blue-600 text-white p-2 rounded">Add Group</button>
+        <button onclick="openModal('addGroupModal')" class="bg-blue-600 text-white p-2 rounded text-sm">Add Group</button>
     </div>
     <div id="addGroupModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
+        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
             <h2 class="text-lg font-bold mb-4">Add Group</h2>
             <form method="POST">
                 <input type="hidden" name="action" value="add">
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Group Name</label>
-                    <input type="text" name="name" class="w-full border rounded p-2" required>
+                    <input type="text" name="name" class="w-full border rounded p-2 text-sm" required>
                 </div>
                 <div class="flex justify-end">
-                    <button type="button" onclick="closeModal('addGroupModal')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add</button>
+                    <button type="button" onclick="closeModal('addGroupModal')" class="mr-2 bg-gray-300 p-2 rounded text-sm">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Add</button>
                 </div>
             </form>
         </div>
@@ -27,33 +27,43 @@
     <!-- Groups List -->
     {% for group in groups %}
     <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Group: {{ group[1] }}
-        </h3>
+        <h3 class="text-md font-bold">Group: {{ group[1] }}</h3>
+        <h4 class="text-sm font-medium mt-2">Assigned Attendees</h4>
+        <ul class="list-disc ml-5">
+            {% for attendee in group_attendees[group[0]] %}
+            <li>
+                <a href="{{ url_for('attendee_profile', attendee_id=attendee[0]) }}" class="text-blue-600 hover:underline text-xs">
+                    {{ attendee[1] }} ({{ attendee[2] }})
+                </a>
+            </li>
+            {% else %}
+            <li class="text-xs text-gray-500">No attendees assigned</li>
+            {% endfor %}
+        </ul>
         <div class="mt-2">
-            <button onclick="openModal('editGroupModal{{ group[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2">Edit</button>
+            <button onclick="openModal('editGroupModal{{ group[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2 text-xs">Edit</button>
             <form method="POST" class="inline">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="group_id" value="{{ group[0] }}">
-                <button type="submit" class="bg-red-600 text-white p-1 rounded" onclick="return confirm('Are you sure you want to delete this group?')">Delete</button>
+                <button type="submit" class="bg-red-600 text-white p-1 rounded text-xs" onclick="return confirm('Are you sure you want to delete this group?')">Delete</button>
             </form>
         </div>
     </div>
 
     <!-- Edit Group Modal -->
     <div id="editGroupModal{{ group[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
+        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
             <h2 class="text-lg font-bold mb-4">Edit Group</h2>
             <form method="POST">
                 <input type="hidden" name="action" value="edit">
                 <input type="hidden" name="group_id" value="{{ group[0] }}">
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Group Name</label>
-                    <input type="text" name="name" value="{{ group[1] }}" class="w-full border rounded p-2" required>
+                    <input type="text" name="name" value="{{ group[1] }}" class="w-full border rounded p-2 text-sm" required>
                 </div>
                 <div class="flex justify-end">
-                    <button type="button" onclick="closeModal('editGroupModal{{ group[0] }}')" class="mr-2 bg-gray-300 p-2 rounded">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded">Save</button>
+                    <button type="button" onclick="closeModal('editGroupModal{{ group[0] }}')" class="mr-2 bg-gray-300 p-2 rounded text-sm">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Save</button>
                 </div>
             </form>
         </div>

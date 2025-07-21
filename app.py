@@ -162,7 +162,7 @@ def init_db():
                 group_d_id = c.fetchone()[0]
                 logger.info("Sample groups inserted")
 
-                today = '2025-07-19'
+                today = '2025-07-20'
                 tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
@@ -587,13 +587,24 @@ def manage_groups():
     try:
         c.execute("SELECT id, name FROM groups ORDER BY name")
         groups = c.fetchall()
+        group_attendees = {}
+        for group in groups:
+            c.execute("""
+                SELECT a.id, a.full_name, a.attendee_id
+                FROM attendees a
+                JOIN attendee_groups ag ON a.id = ag.attendee_id
+                WHERE ag.group_id = %s
+                ORDER BY a.full_name
+            """, (group[0],))
+            group_attendees[group[0]] = c.fetchall()
     except psycopg2.Error as e:
-        logger.error(f"Database error fetching groups: {e}")
+        logger.error(f"Database error fetching groups or attendees: {e}")
         flash('Error loading groups. Please try again.', 'error')
         groups = []
+        group_attendees = {}
     finally:
         conn.close()
-    return render_template('manage_groups.html', groups=groups)
+    return render_template('manage_groups.html', groups=groups, group_attendees=group_attendees)
 
 @app.route('/manage_users', methods=['GET', 'POST'])
 @login_required

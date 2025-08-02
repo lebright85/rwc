@@ -10,14 +10,16 @@
             Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
         </h3>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No classes scheduled for today.</p>
     {% endfor %}
 
     <div class="mt-6">
-        <a href="{{ url_for('manage_classes') }}" class="bg-blue-600 text-white p-2 rounded mr-2">Manage Classes</a>
-        <a href="{{ url_for('manage_attendees') }}" class="bg-blue-600 text-white p-2 rounded mr-2">Manage Attendees</a>
-        <a href="{{ url_for('manage_groups') }}" class="bg-blue-600 text-white p-2 rounded mr-2">Manage Groups</a>
-        <a href="{{ url_for('manage_users') }}" class="bg-blue-600 text-white p-2 rounded mr-2">Manage Users</a>
-        <a href="{{ url_for('reports') }}" class="bg-blue-600 text-white p-2 rounded">Reports</a>
+        <a href="{{ url_for('manage_classes') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Classes</a>
+        <a href="{{ url_for('manage_attendees') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Attendees</a>
+        <a href="{{ url_for('manage_groups') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Groups</a>
+        <a href="{{ url_for('manage_users') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Users</a>
+        <a href="{{ url_for('reports') }}" class="bg-blue-600 text-white p-2 rounded text-sm">Reports</a>
     </div>
 </div>
 {% endblock %}

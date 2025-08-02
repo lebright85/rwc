@@ -128,11 +128,7 @@
         </ul>
         <div class="mt-2">
             <button onclick="openModal('editClassModal{{ class[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2 text-xs">Edit</button>
-            <form method="POST" id="deleteForm{{ class[0] }}" class="inline">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="class_id" value="{{ class[0] }}">
-                <button type="submit" form="deleteForm{{ class[0] }}" class="bg-red-600 text-white p-1 rounded mr-2 text-xs">Delete</button>
-            </form>
+            <button onclick="openModal('deleteClassModal{{ class[0] }}')" class="bg-red-600 text-white p-1 rounded mr-2 text-xs">Delete</button>
             <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-xs">Assign Attendee</button>
             <button onclick="openModal('assignGroupModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-xs">Assign Group</button>
             <form method="POST" id="lockForm{{ class[0] }}" class="inline">
@@ -219,6 +215,30 @@
             </div>
         </div>
 
+        <!-- Delete Class Modal -->
+        <div id="deleteClassModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
+                <h2 class="text-base font-bold mb-1">Delete Class</h2>
+                <p class="text-xs mb-2">Are you sure you want to delete "{{ class[2] }}" ({{ class[3] }})?</p>
+                <form method="POST" id="deleteClassForm{{ class[0] }}">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Delete Option</label>
+                        <select name="action" class="w-full border rounded p-1 text-xs" required>
+                            <option value="delete">Delete this class only</option>
+                            {% if class[9] %}
+                            <option value="delete_all_future">Delete this class and all future recurring instances</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('deleteClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-xs">Cancel</button>
+                        <button type="submit" form="deleteClassForm{{ class[0] }}" class="bg-red-600 text-white p-1 rounded text-xs">Delete</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Assign Attendee Modal -->
         <div id="assignAttendeeModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
             <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
@@ -244,7 +264,7 @@
 
         <!-- Assign Group Modal -->
         <div id="assignGroupModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-vw-sm max-h-[60vh] overflow-y-auto">
                 <h2 class="text-base font-bold mb-1">Assign Group to Class</h2>
                 <form method="POST" id="assignGroupForm{{ class[0] }}">
                     <input type="hidden" name="action" value="assign_group">

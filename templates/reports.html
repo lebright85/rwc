@@ -10,15 +10,24 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Start Date</label>
-                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2" required>
+                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2 text-sm" required>
                 </div>
                 <div>
                     <label class="block text-sm font-medium">End Date</label>
-                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2" required>
+                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Group</label>
+                    <select name="group_id" class="w-full border rounded p-2 text-sm">
+                        <option value="all" {% if group_id == 'all' %}selected{% endif %}>All Groups</option>
+                        {% for group in groups %}
+                        <option value="{{ group[0] }}" {% if group_id == group[0]|string %}selected{% endif %}>{{ group[1] }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium">Class</label>
-                    <select name="class_id" class="w-full border rounded p-2">
+                    <select name="class_id" class="w-full border rounded p-2 text-sm">
                         <option value="all" {% if class_id == 'all' %}selected{% endif %}>All Classes</option>
                         {% for class in classes %}
                         <option value="{{ class[0] }}" {% if class_id == class[0]|string %}selected{% endif %}>{{ class[1] }}</option>
@@ -27,7 +36,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium">Attendee</label>
-                    <select name="attendee_id" class="w-full border rounded p-2">
+                    <select name="attendee_id" class="w-full border rounded p-2 text-sm">
                         <option value="all" {% if attendee_id == 'all' %}selected{% endif %}>All Attendees</option>
                         {% for attendee in attendees %}
                         <option value="{{ attendee[0] }}" {% if attendee_id == attendee[0]|string %}selected{% endif %}>{{ attendee[1] }}</option>
@@ -36,17 +45,24 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium">Counselor</label>
-                    <select name="counselor_id" class="w-full border rounded p-2">
+                    <select name="counselor_id" class="w-full border rounded p-2 text-sm">
                         <option value="all" {% if counselor_id == 'all' %}selected{% endif %}>All Counselors</option>
                         {% for counselor in counselors %}
                         <option value="{{ counselor[0] }}" {% if counselor_id == counselor[0]|string %}selected{% endif %}>{{ counselor[1] }}</option>
                         {% endfor %}
                     </select>
                 </div>
+                <div>
+                    <label class="block text-sm font-medium">Sort By</label>
+                    <select name="sort_by" class="w-full border rounded p-2 text-sm">
+                        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
+                        <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group</option>
+                    </select>
+                </div>
             </div>
             <div class="mt-4 flex justify-end space-x-4">
-                <button type="submit" name="action" value="generate" class="bg-blue-600 text-white p-2 rounded">Generate Report</button>
-                <button type="submit" name="action" value="download_csv" class="bg-green-600 text-white p-2 rounded">Download CSV</button>
+                <button type="submit" name="action" value="generate" class="bg-blue-600 text-white p-2 rounded text-sm">Generate Report</button>
+                <button type="submit" name="action" value="download_csv" class="bg-green-600 text-white p-2 rounded text-sm">Download CSV</button>
             </div>
         </form>
     </div>
@@ -66,38 +82,38 @@
             <table class="w-full border-collapse">
                 <thead>
                     <tr class="bg-gray-200">
-                        <th class="border p-2">Attendee Name</th>
-                        <th class="border p-2">Attendee ID</th>
-                        <th class="border p-2">Groups</th>
-                        <th class="border p-2">Status</th>
-                        <th class="border p-2">Time In</th>
-                        <th class="border p-2">Time Out</th>
-                        <th class="border p-2">Notes</th>
-                        <th class="border p-2">Location</th>
+                        <th class="border p-2 text-sm">Attendee Name</th>
+                        <th class="border p-2 text-sm">Attendee ID</th>
+                        <th class="border p-2 text-sm">Groups</th>
+                        <th class="border p-2 text-sm">Status</th>
+                        <th class="border p-2 text-sm">Time In</th>
+                        <th class="border p-2 text-sm">Time Out</th>
+                        <th class="border p-2 text-sm">Notes</th>
+                        <th class="border p-2 text-sm">Location</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for attendee in data.attendees %}
                     <tr>
-                        <td class="border p-2">{{ attendee[0] }}</td>
-                        <td class="border p-2">{{ attendee[1] }}</td>
-                        <td class="border p-2">{{ attendee[2] or 'N/A' }}</td>
-                        <th class="border p-2">{{ attendee[3] or 'Present' }}</th>
-                        <td class="border p-2">{{ attendee[4] or 'N/A' }}</td>
-                        <td class="border p-2">{{ attendee[5] or 'N/A' }}</td>
-                        <td class="border p-2">{{ attendee[6] or 'N/A' }}</td>
-                        <td class="border p-2">{{ attendee[7] or 'N/A' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[0] }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[1] }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[2] or 'N/A' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[3] or 'Present' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[4] or 'N/A' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[5] or 'N/A' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[6] or 'N/A' }}</td>
+                        <td class="border p-2 text-sm">{{ attendee[7] or 'N/A' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <p>No attendees found for this class.</p>
+            <p class="text-sm">No attendees found for this class.</p>
             {% endif %}
         </div>
         {% endfor %}
         {% else %}
-        <p>No data available for the selected filters.</p>
+        <p class="text-sm">No data available for the selected filters.</p>
         {% endif %}
     </div>
 </div>

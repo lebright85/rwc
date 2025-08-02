@@ -9,7 +9,7 @@
         <p><strong>Group Details:</strong> {{ attendee[3] or 'N/A' }}</p>
         <p><strong>Notes:</strong> {{ attendee[4] or 'N/A' }}</p>
         <div class="mt-4">
-            <a href="{{ url_for('manage_attendees') }}" class="bg-gray-300 p-2 rounded">Back to Attendees</a>
+            <a href="{{ url_for('manage_attendees') }}" class="bg-gray-300 p-2 rounded text-sm">Back to Attendees</a>
         </div>
     </div>
 
@@ -19,27 +19,27 @@
         <table class="w-full border-collapse">
             <thead>
                 <tr class="bg-gray-200">
-                    <th class="border p-2">Group Name</th>
-                    <th class="border p-2">Class Name</th>
-                    <th class="border p-2">Date</th>
-                    <th class="border p-2">Group Hours</th>
-                    <th class="border p-2">Location</th>
+                    <th class="border p-2 text-sm">Group Name</th>
+                    <th class="border p-2 text-sm">Class Name</th>
+                    <th class="border p-2 text-sm">Date</th>
+                    <th class="border p-2 text-sm">Group Hours</th>
+                    <th class="border p-2 text-sm">Location</th>
                 </tr>
             </thead>
             <tbody>
                 {% for class in assigned_classes %}
                 <tr>
-                    <td class="border p-2">{{ class[1] }}</td>
-                    <td class="border p-2">{{ class[2] }}</td>
-                    <td class="border p-2">{{ class[3] }}</td>
-                    <td class="border p-2">{{ class[4] }}</td>
-                    <td class="border p-2">{{ class[5] }}</td>
+                    <td class="border p-2 text-sm">{{ class[1] }}</td>
+                    <td class="border p-2 text-sm">{{ class[2] }}</td>
+                    <td class="border p-2 text-sm">{{ class[3] }}</td>
+                    <td class="border p-2 text-sm">{{ class[4] }}</td>
+                    <td class="border p-2 text-sm">{{ class[5] }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p>No classes assigned to this attendee.</p>
+        <p class="text-sm">No classes assigned to this attendee.</p>
         {% endif %}
     </div>
 
@@ -49,29 +49,29 @@
         <table class="w-full border-collapse">
             <thead>
                 <tr class="bg-gray-200">
-                    <th class="border p-2">Class Name</th>
-                    <th class="border p-2">Status</th>
-                    <th class="border p-2">Time In</th>
-                    <th class="border p-2">Time Out</th>
-                    <th class="border p-2">Notes</th>
-                    <th class="border p-2">Location</th>
+                    <th class="border p-2 text-sm">Class Name</th>
+                    <th class="border p-2 text-sm">Status</th>
+                    <th class="border p-2 text-sm">Time In</th>
+                    <th class="border p-2 text-sm">Time Out</th>
+                    <th class="border p-2 text-sm">Notes</th>
+                    <th class="border p-2 text-sm">Location</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in attendance_records %}
                 <tr>
-                    <td class="border p-2">{{ record[0] }}</td>
-                    <td class="border p-2">{{ record[3] or 'Present' }}</td>
-                    <td class="border p-2">{{ record[1] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[2] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[4] or 'N/A' }}</td>
-                    <td class="border p-2">{{ record[5] or 'N/A' }}</td>
+                    <td class="border p-2 text-sm">{{ record[0] }}</td>
+                    <td class="border p-2 text-sm">{{ record[3] or 'Present' }}</td>
+                    <td class="border p-2 text-sm">{{ record[1] or 'N/A' }}</td>
+                    <td class="border p-2 text-sm">{{ record[2] or 'N/A' }}</td>
+                    <td class="border p-2 text-sm">{{ record[4] or 'N/A' }}</td>
+                    <td class="border p-2 text-sm">{{ record[5] or 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p>No attendance records for this attendee.</p>
+        <p class="text-sm">No attendance records for this attendee.</p>
         {% endif %}
     </div>
 </div>

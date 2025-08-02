@@ -1,40 +1,56 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold mb-6">Counselor Dashboard</h1>
-    <p class="mb-4">Welcome, {{ counselor_name }} ({{ counselor_credentials }})</p>
+    <h1 class="text-2xl font-bold mb-6">Counselor Dashboard: {{ counselor_name }}{% if counselor_credentials %}, {{ counselor_credentials }}{% endif %}</h1>
 
-    <h2 class="text-lg font-bold mb-4">Today's Classes ({{ today }})</h2>
+    <div class="mt-6">
+        <a href="{{ url_for('counselor_manage_classes') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Classes</a>
+        <a href="{{ url_for('logout') }}" class="bg-gray-600 text-white p-2 rounded text-sm">Logout</a>
+    </div>
+
+    <h2 class="text-lg font-bold mt-6 mb-4">Today's Classes ({{ today }})</h2>
     {% for class in today_classes %}
     <div class="border-b py-4 last:border-b-0">
         <h3 class="text-md font-bold">
-            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[4] }}, {{ class[5] }})
+            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
             {% if class[6] %} (Locked) {% endif %}
         </h3>
-        <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded">Record Attendance</a>
+        <div class="mt-2">
+            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">Manage Attendance</a>
+        </div>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No classes scheduled for today.</p>
     {% endfor %}
 
-    <h2 class="text-lg font-bold mb-4 mt-6">Upcoming Classes</h2>
+    <h2 class="text-lg font-bold mt-6 mb-4">Upcoming Classes</h2>
     {% for class in upcoming_classes %}
     <div class="border-b py-4 last:border-b-0">
         <h3 class="text-md font-bold">
             Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
             {% if class[6] %} (Locked) {% endif %}
         </h3>
-        <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded">View Attendance</a>
+        <div class="mt-2">
+            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">Manage Attendance</a>
+        </div>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No upcoming classes scheduled.</p>
     {% endfor %}
 
-    <h2 class="text-lg font-bold mb-4 mt-6">Past Classes</h2>
+    <h2 class="text-lg font-bold mt-6 mb-4">Past Classes (Last 10)</h2>
     {% for class in past_classes %}
     <div class="border-b py-4 last:border-b-0">
         <h3 class="text-md font-bold">
             Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
             {% if class[6] %} (Locked) {% endif %}
         </h3>
-        <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded">View/Edit Attendance</a>
+        <div class="mt-2">
+            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">View Attendance</a>
+        </div>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No past classes found.</p>
     {% endfor %}
 </div>
 {% endblock %}

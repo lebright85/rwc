@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from werkzeug.routing import BuildError
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, filename='app.log')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -162,7 +162,7 @@ def init_db():
                 group_d_id = c.fetchone()[0]
                 logger.info("Sample groups inserted")
 
-                today = '2025-07-20'
+                today = '2025-08-02'
                 tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
@@ -338,7 +338,7 @@ def admin_dashboard():
     c = conn.cursor()
     today = datetime.today().strftime('%Y-%m-%d')
     try:
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s",
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s ORDER BY group_name, group_hours",
                   (today,))
         today_classes = c.fetchall()
     except psycopg2.Error as e:
@@ -454,6 +454,7 @@ def reports():
                 class_query += " AND ag.group_id = %s"
                 params.append(int(group_id))
             
+            class_query += " ORDER BY c.date ASC"
             c.execute(class_query, params)
             class_records = c.fetchall()
             logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
@@ -477,7 +478,7 @@ def reports():
                 if group_id and group_id != 'all':
                     attendee_query += " AND ag.group_id = %s"
                     attendee_params.append(int(group_id))
-                attendee_query += " GROUP BY a.id, att.id"
+                attendee_query += " GROUP BY a.id, att.id ORDER BY att.full_name ASC"
                 c.execute(attendee_query, attendee_params)
                 attendee_records = c.fetchall()
                 logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")

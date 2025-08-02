@@ -1,1 +1,233 @@
 
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-6">Manage Your Classes</h1>
+
+    <!-- Filter Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-lg font-bold mb-4">Filter Classes</h2>
+        <form method="GET" id="filterClassesForm">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium">Group</label>
+                    <select name="group_filter" class="w-full border rounded p-2 text-sm">
+                        <option value="all" {% if group_filter == 'all' %}selected{% endif %}>All Groups</option>
+                        {% for group in groups %}
+                        <option value="{{ group[1] }}" {% if group_filter == group[1] %}selected{% endif %}>{{ group[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Start Date</label>
+                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">End Date</label>
+                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Sort By</label>
+                    <select name="sort_by" class="w-full border rounded p-2 text-sm">
+                        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
+                        <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Classes List -->
+    {% for class in classes %}
+    <div class="border-b py-4 last:border-b-0">
+        <h3 class="text-md font-bold">
+            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[8] }})
+            {% if class[12] %} (Locked) {% endif %}
+        </h3>
+        <p>Counselor: {{ class[11] }}</p>
+        <p>Type: {{ class[6] }} | Notes: {{ class[7] }} | Recurring: {{ 'Yes' if class[9] else 'No' }} | Frequency: {{ class[10] or 'N/A' }}</p>
+        <h4 class="text-sm font-medium mt-2">Assigned Attendees</h4>
+        <ul class="list-disc ml-5">
+            {% for attendee in class_attendees[class[0]] %}
+            <li>
+                <span class="text-xs">{{ attendee[1] }} ({{ attendee[2] }}) [Groups: {{ attendee[3] or 'N/A' }}]</span>
+                <form method="POST" id="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="inline">
+                    <input type="hidden" name="action" value="unassign_attendee">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <button type="submit" form="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="text-red-600 text-xs ml-2">Unassign</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="mt-2">
+            {% if not class[12] %}
+            <button onclick="openModal('editClassModal{{ class[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2 text-xs">Edit</button>
+            <button onclick="openModal('deleteClassModal{{ class[0] }}')" class="bg-red-600 text-white p-1 rounded mr-2 text-xs">Delete</button>
+            <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-xs">Assign Attendee</button>
+            <button onclick="openModal('assignGroupModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-xs">Assign Group</button>
+            {% endif %}
+        </div>
+
+        <!-- Edit Class Modal -->
+        <div id="editClassModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-md max-h-[60vh] overflow-y-auto">
+                <h2 class="text-base font-bold mb-1">Edit Class</h2>
+                <form method="POST" id="editClassForm{{ class[0] }}">
+                    <input type="hidden" name="action" value="edit">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Group Name</label>
+                        <input type="text" name="group_name" value="{{ class[1] }}" class="w-full border rounded p-1 text-xs" required>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Class Name</label>
+                        <input type="text" name="class_name" value="{{ class[2] }}" class="w-full border rounded p-1 text-xs" required>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Date</label>
+                        <input type="date" name="date" value="{{ class[3] }}" class="w-full border rounded p-1 text-xs" required>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Group Hours</label>
+                        <input type="text" name="group_hours" value="{{ class[4] }}" class="w-full border rounded p-1 text-xs" required>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Counselor</label>
+                        <select name="counselor_id" class="w-full border rounded p-1 text-xs" required>
+                            {% for counselor in counselors %}
+                            <option value="{{ counselor[0] }}" {% if counselor[0] == class[5] %}selected{% endif %}>{{ counselor[2] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Group Type</label>
+                        <input type="text" name="group_type" value="{{ class[6] }}" class="w-full border rounded p-1 text-xs">
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Notes</label>
+                        <textarea name="notes" class="w-full border rounded p-1 text-xs h-16">{{ class[7] }}</textarea>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Location</label>
+                        <input type="text" name="location" value="{{ class[8] }}" class="w-full border rounded p-1 text-xs">
+                    </div>
+                    <div class="mb-1 flex items-center">
+                        <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] %}checked{% endif %} class="mr-1">
+                        <label for="recurring_{{ class[0] }}" class="text-xs">Recurring</label>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Frequency</label>
+                        <select name="frequency" class="w-full border rounded p-1 text-xs">
+                            <option value="weekly" {% if class[10] == 'weekly' %}selected{% endif %}>Weekly</option>
+                        </select>
+                    </div>
+                    <div class="mb-1 flex items-center">
+                        <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}" class="mr-1">
+                        <label for="propagate_{{ class[0] }}" class="text-xs">Propagate to future recurring classes</label>
+                    </div>
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Assigned Attendees</label>
+                        <div class="max-h-32 overflow-y-auto border rounded p-1">
+                            {% for attendee in attendees %}
+                            <div class="flex items-center">
+                                <input type="checkbox" name="attendee_ids" value="{{ attendee[0] }}" id="attendee_{{ attendee[0] }}_{{ class[0] }}" {% if attendee[0] in class_attendees[class[0]]|map(attribute='0') %}checked{% endif %} class="mr-1">
+                                <label for="attendee_{{ attendee[0] }}_{{ class[0] }}" class="text-xs">{{ attendee[1] }} ({{ attendee[2] }})</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-white pt-1 flex justify-end">
+                        <button type="button" onclick="closeModal('editClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-xs">Cancel</button>
+                        <button type="submit" form="editClassForm{{ class[0] }}" class="bg-blue-600 text-white p-1 rounded text-xs">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Delete Class Modal -->
+        <div id="deleteClassModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
+                <h2 class="text-base font-bold mb-1">Delete Class</h2>
+                <p class="text-xs mb-2">Are you sure you want to delete "{{ class[2] }}" ({{ class[3] }})?</p>
+                <form method="POST" id="deleteClassForm{{ class[0] }}">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Delete Option</label>
+                        <select name="action" class="w-full border rounded p-1 text-xs" required>
+                            <option value="delete">Delete this class only</option>
+                            {% if class[9] %}
+                            <option value="delete_all_future">Delete this class and all future recurring instances</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('deleteClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-xs">Cancel</button>
+                        <button type="submit" form="deleteClassForm{{ class[0] }}" class="bg-red-600 text-white p-1 rounded text-xs">Delete</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Assign Attendee Modal -->
+        <div id="assignAttendeeModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
+                <h2 class="text-base font-bold mb-1">Assign Attendee to Class</h2>
+                <form method="POST" id="assignAttendeeForm{{ class[0] }}">
+                    <input type="hidden" name="action" value="assign_attendee">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Attendee</label>
+                        <select name="attendee_id" class="w-full border rounded p-1 text-xs" required>
+                            {% for attendee in attendees %}
+                            <option value="{{ attendee[0] }}">{{ attendee[1] }} ({{ attendee[2] }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('assignAttendeeModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-xs">Cancel</button>
+                        <button type="submit" form="assignAttendeeForm{{ class[0] }}" class="bg-blue-600 text-white p-1 rounded text-xs">Assign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Assign Group Modal -->
+        <div id="assignGroupModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-2 rounded-lg shadow-md w-full max-w-sm max-h-[60vh] overflow-y-auto">
+                <h2 class="text-base font-bold mb-1">Assign Group to Class</h2>
+                <form method="POST" id="assignGroupForm{{ class[0] }}">
+                    <input type="hidden" name="action" value="assign_group">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-1">
+                        <label class="block text-xs font-medium">Group</label>
+                        <select name="group_id" class="w-full border rounded p-1 text-xs" required>
+                            {% for group in groups %}
+                            <option value="{{ group[0] }}">{{ group[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('assignGroupModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-xs">Cancel</button>
+                        <button type="submit" form="assignGroupForm{{ class[0] }}" class="bg-blue-600 text-white p-1 rounded text-xs">Assign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- JavaScript for Modals -->
+    <script>
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+        }
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+    </script>
+</div>
+{% endblock %}

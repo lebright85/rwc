@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from werkzeug.routing import BuildError
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, filename='app.log')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -152,30 +152,30 @@ def init_db():
                 counselor2_id = c.fetchone()[0]
                 logger.info("Sample users inserted")
 
-                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group A',))
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Dakota',))
                 group_a_id = c.fetchone()[0]
-                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group B',))
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Cherokee',))
                 group_b_id = c.fetchone()[0]
-                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group C',))
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Virtual',))
                 group_c_id = c.fetchone()[0]
                 c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group D',))
                 group_d_id = c.fetchone()[0]
                 logger.info("Sample groups inserted")
 
-                today = '2025-08-02'
+                today = '2025-08-03'
                 tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                          ('Group A', 'Mindfulness', today, '10:00-11:30', counselor1_id, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
+                          ('Dakota', 'Mindfulness', today, '10:00-11:30', counselor1_id, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
                 mindfulness_id = c.fetchone()[0]
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                          ('Group D', 'Yoga Session', today, '13:00-14:00', counselor2_id, 'Wellness', 'Beginner-friendly', 'Zoom', 0, None))
+                          ('Virtual', 'Yoga Session', today, '13:00-14:00', counselor2_id, 'Wellness', 'Beginner-friendly', 'Zoom', 0, None))
                 yoga_id = c.fetchone()[0]
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                          ('Group B', 'Stress Management', tomorrow, '14:00-15:30', counselor1_id, 'Workshop', 'Interactive session', 'Zoom', 0, None))
+                          ('Cherokee', 'Stress Management', tomorrow, '14:00-15:30', counselor1_id, 'Workshop', 'Interactive session', 'Zoom', 0, None))
                 stress_id = c.fetchone()[0]
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                          ('Group C', 'Coping Skills', day_after, '09:00-10:30', counselor2_id, 'Therapy', 'Group discussion', 'Office', 0, None))
+                          ('Group D', 'Coping Skills', day_after, '09:00-10:30', counselor2_id, 'Therapy', 'Group discussion', 'Office', 0, None))
                 coping_id = c.fetchone()[0]
                 logger.info("Sample classes inserted")
 
@@ -337,10 +337,16 @@ def admin_dashboard():
     conn = get_db_connection()
     c = conn.cursor()
     today = datetime.today().strftime('%Y-%m-%d')
-    c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s ORDER BY group_name, group_hours",
-              (today,))
-    today_classes = c.fetchall()
-    conn.close()
+    try:
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s ORDER BY group_name, group_hours",
+                  (today,))
+        today_classes = c.fetchall()
+    except psycopg2.Error as e:
+        logger.error(f"Database error in admin_dashboard: {e}")
+        flash('Error loading dashboard. Please try again.', 'error')
+        today_classes = []
+    finally:
+        conn.close()
     return render_template('admin_dashboard.html', today_classes=today_classes, today=today)
 
 @app.route('/attendee_profile/<int:attendee_id>')
@@ -350,25 +356,31 @@ def attendee_profile(attendee_id):
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, full_name, attendee_id, group_details, notes FROM attendees WHERE id = %s",
-              (attendee_id,))
-    attendee = c.fetchone()
-    if not attendee:
-        flash('Attendee not found')
+    try:
+        c.execute("SELECT id, full_name, attendee_id, group_details, notes FROM attendees WHERE id = %s",
+                  (attendee_id,))
+        attendee = c.fetchone()
+        if not attendee:
+            flash('Attendee not found')
+            return redirect(url_for('manage_attendees'))
+        c.execute("SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location FROM classes c JOIN class_attendees ca ON c.id = ca.class_id WHERE ca.attendee_id = %s",
+                  (attendee_id,))
+        assigned_classes = c.fetchall()
+        c.execute("SELECT c.class_name, a.time_in, a.time_out, a.attendance_status, a.notes, a.location FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
+                  (attendee_id,))
+        attendance_records = c.fetchall()
+        c.execute("""
+            SELECT string_agg(g.name, ', ') FROM groups g
+            JOIN attendee_groups ag ON g.id = ag.group_id
+            WHERE ag.attendee_id = %s
+        """, (attendee_id,))
+        groups_str = c.fetchone()[0] or 'N/A'
+    except psycopg2.Error as e:
+        logger.error(f"Database error in attendee_profile: {e}")
+        flash('Error loading attendee profile. Please try again.', 'error')
         return redirect(url_for('manage_attendees'))
-    c.execute("SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location FROM classes c JOIN class_attendees ca ON c.id = ca.class_id WHERE ca.attendee_id = %s",
-              (attendee_id,))
-    assigned_classes = c.fetchall()
-    c.execute("SELECT c.class_name, a.time_in, a.time_out, a.attendance_status, a.notes, a.location FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
-              (attendee_id,))
-    attendance_records = c.fetchall()
-    c.execute("""
-        SELECT string_agg(g.name, ', ') FROM groups g
-        JOIN attendee_groups ag ON g.id = ag.group_id
-        WHERE ag.attendee_id = %s
-    """, (attendee_id,))
-    groups_str = c.fetchone()[0] or 'N/A'
-    conn.close()
+    finally:
+        conn.close()
     return render_template('attendee_profile.html', attendee=attendee, assigned_classes=assigned_classes, attendance_records=attendance_records, groups_str=groups_str)
 
 @app.route('/reports', methods=['GET', 'POST'])
@@ -378,154 +390,166 @@ def reports():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, class_name FROM classes ORDER BY class_name")
-    classes = c.fetchall()
-    c.execute("SELECT id, full_name FROM attendees ORDER BY full_name")
-    attendees = c.fetchall()
-    c.execute("SELECT id, full_name FROM users WHERE role = 'counselor' ORDER BY full_name")
-    counselors = c.fetchall()
-    c.execute("SELECT id, name FROM groups ORDER BY name")
-    groups = c.fetchall()
-    
-    today = datetime.today()
-    default_start_date = today.strftime('%Y-%m-%d')
-    default_end_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
-    start_date = request.form.get('start_date', default_start_date)
-    end_date = request.form.get('end_date', default_end_date)
-    class_id = request.form.get('class_id', 'all')
-    attendee_id = request.form.get('attendee_id', 'all')
-    counselor_id = request.form.get('counselor_id', 'all')
-    group_id = request.form.get('group_id', 'all')
-    action = request.form.get('action', 'generate')
-    
-    logger.info(f"Reports filter values: start_date={start_date}, end_date=end_date, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, group_id={group_id}, action={action}")
-    
-    class_query = """
-        SELECT DISTINCT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
-               u.full_name AS counselor_name, u.credentials AS counselor_credentials
-        FROM classes c
-        JOIN users u ON c.counselor_id = u.id
-        LEFT JOIN class_attendees ca ON c.id = ca.class_id
-        LEFT JOIN attendees att ON ca.attendee_id = att.id
-        LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
-        WHERE 1=1
-    """
-    params = []
-    
     try:
-        if start_date and end_date:
-            try:
-                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                if start_dt <= end_dt:
-                    class_query += " AND c.date >= %s AND c.date <= %s"
-                    params.extend([start_date, end_date])
-                else:
-                    flash('Start date must be before end date', 'error')
-                    raise ValueError("Invalid date range")
-            except ValueError as e:
-                logger.error(f"Invalid date format: {e}")
-                flash('Invalid date format. Please use YYYY-MM-DD', 'error')
-                raise
-        else:
-            flash('Start and end dates are required', 'error')
-            raise ValueError("Missing date filters")
-
-        if class_id and class_id != 'all':
-            class_query += " AND c.id = %s"
-            params.append(int(class_id))
-        if counselor_id and counselor_id != 'all':
-            class_query += " AND c.counselor_id = %s"
-            params.append(int(counselor_id))
-        if group_id and group_id != 'all':
-            class_query += " AND ag.group_id = %s"
-            params.append(int(group_id))
+        c.execute("SELECT id, class_name FROM classes ORDER BY class_name")
+        classes = c.fetchall()
+        c.execute("SELECT id, full_name FROM attendees ORDER BY full_name")
+        attendees = c.fetchall()
+        c.execute("SELECT id, full_name FROM users WHERE role = 'counselor' ORDER BY full_name")
+        counselors = c.fetchall()
+        c.execute("SELECT id, name FROM groups ORDER BY name")
+        groups = c.fetchall()
         
-        c.execute(class_query, params)
-        class_records = c.fetchall()
-        logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
-
-        report_data = []
-        for class_record in class_records:
-            class_id = class_record[0]
-            attendee_query = """
-                SELECT att.full_name, att.attendee_id, string_agg(g.name, ', ') AS groups,
-                       a.attendance_status, a.time_in, a.time_out, a.notes, a.location
-                FROM attendance a
-                JOIN attendees att ON a.attendee_id = att.id
-                LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
-                LEFT JOIN groups g ON ag.group_id = g.id
-                WHERE a.class_id = %s
-            """
-            attendee_params = [class_id]
-            if attendee_id and attendee_id != 'all':
-                attendee_query += " AND a.attendee_id = %s"
-                attendee_params.append(int(attendee_id))
-            if group_id and group_id != 'all':
-                attendee_query += " AND ag.group_id = %s"
-                attendee_params.append(int(group_id))
-            attendee_query += " GROUP BY a.id, att.id ORDER BY att.full_name ASC"
-            c.execute(attendee_query, attendee_params)
-            attendee_records = c.fetchall()
-            logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")
-            report_data.append({
-                'class': class_record,
-                'attendees': attendee_records
-            })
+        today = datetime.today()
+        default_start_date = today.strftime('%Y-%m-%d')
+        default_end_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
+        start_date = request.form.get('start_date', default_start_date)
+        end_date = request.form.get('end_date', default_end_date)
+        class_id = request.form.get('class_id', 'all')
+        attendee_id = request.form.get('attendee_id', 'all')
+        counselor_id = request.form.get('counselor_id', 'all')
+        group_id = request.form.get('group_id', 'all')
+        sort_by = request.form.get('sort_by', 'date')
+        action = request.form.get('action', 'generate')
         
-        if not report_data and action == 'generate':
-            flash('No classes found for the selected filters', 'info')
+        logger.info(f"Reports filter values: start_date={start_date}, end_date={end_date}, class_id={class_id}, attendee_id={attendee_id}, counselor_id={counselor_id}, group_id={group_id}, sort_by={sort_by}, action={action}")
         
-        if action == 'download_csv':
-            try:
-                output = io.StringIO()
-                writer = csv.writer(output)
-                writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
-                                 'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
-                                 'Groups', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
-                for data in report_data:
-                    class_record = data['class']
-                    class_info = [
-                        class_record[1], class_record[2], class_record[3], class_record[4],
-                        class_record[5], class_record[6], class_record[7] or ''
-                    ]
-                    if not data['attendees']:
-                        writer.writerow(class_info + ['No attendees', '', '', '', '', '', ''])
+        class_query = """
+            SELECT DISTINCT c.id, c.class_name, c.group_name, c.date, c.group_hours, c.location,
+                   u.full_name AS counselor_name, u.credentials AS counselor_credentials
+            FROM classes c
+            JOIN users u ON c.counselor_id = u.id
+            LEFT JOIN class_attendees ca ON c.id = ca.class_id
+            LEFT JOIN attendees att ON ca.attendee_id = att.id
+            LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
+            WHERE 1=1
+        """
+        params = []
+        
+        try:
+            if start_date and end_date:
+                try:
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                    if start_dt <= end_dt:
+                        class_query += " AND c.date >= %s AND c.date <= %s"
+                        params.extend([start_date, end_date])
                     else:
-                        for idx, attendee in enumerate(data['attendees']):
-                            row = class_info if idx == 0 else ['', '', '', '', '', '', '']
-                            row += [
-                                attendee[0] or 'No attendees', attendee[1] or '',
-                                attendee[2] or 'N/A', attendee[3] or 'Present',
-                                attendee[4] or '', attendee[5] or '',
-                                attendee[6] or '', attendee[7] or ''
-                            ]
-                            writer.writerow(row)
-                csv_content = output.getvalue()
-                output.close()
-                logger.info("CSV file generated successfully")
-                conn.close()
-                return Response(
-                    csv_content,
-                    mimetype='text/csv',
-                    headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
-                )
-            except Exception as e:
-                logger.error(f"Error generating CSV: {e}")
-                flash('An error occurred while generating the CSV file', 'error')
-                conn.close()
-                return redirect(url_for('reports'))
+                        flash('Start date must be before end date', 'error')
+                        raise ValueError("Invalid date range")
+                except ValueError as e:
+                    logger.error(f"Invalid date format: {e}")
+                    flash('Invalid date format. Please use YYYY-MM-DD', 'error')
+                    raise
+            else:
+                flash('Start and end dates are required', 'error')
+                raise ValueError("Missing date filters")
+
+            if class_id and class_id != 'all':
+                class_query += " AND c.id = %s"
+                params.append(int(class_id))
+            if counselor_id and counselor_id != 'all':
+                class_query += " AND c.counselor_id = %s"
+                params.append(int(counselor_id))
+            if group_id and group_id != 'all':
+                class_query += " AND ag.group_id = %s"
+                params.append(int(group_id))
+            
+            if sort_by == 'group':
+                class_query += " ORDER BY c.group_name ASC, c.date ASC"
+            else:
+                class_query += " ORDER BY c.date ASC"
+            
+            c.execute(class_query, params)
+            class_records = c.fetchall()
+            logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
+
+            report_data = []
+            for class_record in class_records:
+                class_id = class_record[0]
+                attendee_query = """
+                    SELECT att.full_name, att.attendee_id, string_agg(g.name, ', ') AS groups,
+                           a.attendance_status, a.time_in, a.time_out, a.notes, a.location
+                    FROM attendance a
+                    JOIN attendees att ON a.attendee_id = att.id
+                    LEFT JOIN attendee_groups ag ON att.id = ag.attendee_id
+                    LEFT JOIN groups g ON ag.group_id = g.id
+                    WHERE a.class_id = %s
+                """
+                attendee_params = [class_id]
+                if attendee_id and attendee_id != 'all':
+                    attendee_query += " AND a.attendee_id = %s"
+                    attendee_params.append(int(attendee_id))
+                if group_id and group_id != 'all':
+                    attendee_query += " AND ag.group_id = %s"
+                    attendee_params.append(int(group_id))
+                attendee_query += " GROUP BY a.id, att.id ORDER BY att.full_name ASC"
+                c.execute(attendee_query, attendee_params)
+                attendee_records = c.fetchall()
+                logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")
+                report_data.append({
+                    'class': class_record,
+                    'attendees': attendee_records
+                })
+            
+            if not report_data and action == 'generate':
+                flash('No classes found for the selected filters', 'info')
+            
+            if action == 'download_csv':
+                try:
+                    output = io.StringIO()
+                    writer = csv.writer(output)
+                    writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
+                                     'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
+                                     'Groups', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
+                    for data in report_data:
+                        class_record = data['class']
+                        class_info = [
+                            class_record[1], class_record[2], class_record[3], class_record[4],
+                            class_record[5], class_record[6], class_record[7] or ''
+                        ]
+                        if not data['attendees']:
+                            writer.writerow(class_info + ['No attendees', '', '', '', '', '', ''])
+                        else:
+                            for idx, attendee in enumerate(data['attendees']):
+                                row = class_info if idx == 0 else ['', '', '', '', '', '', '']
+                                row += [
+                                    attendee[0] or 'No attendees', attendee[1] or '',
+                                    attendee[2] or 'N/A', attendee[3] or 'Present',
+                                    attendee[4] or '', attendee[5] or '',
+                                    attendee[6] or '', attendee[7] or ''
+                                ]
+                                writer.writerow(row)
+                    csv_content = output.getvalue()
+                    output.close()
+                    logger.info("CSV file generated successfully")
+                    conn.close()
+                    return Response(
+                        csv_content,
+                        mimetype='text/csv',
+                        headers={'Content-Disposition': 'attachment; filename=attendance_report.csv'}
+                    )
+                except Exception as e:
+                    logger.error(f"Error generating CSV: {e}")
+                    flash('An error occurred while generating the CSV file', 'error')
+                    conn.close()
+                    return redirect(url_for('reports'))
         
-    except (psycopg2.Error, ValueError) as e:
-        logger.error(f"Error executing report query: {e}")
-        report_data = []
-        if action == 'generate':
-            flash('Error generating report. Please try again.', 'error')
+        except (psycopg2.Error, ValueError) as e:
+            logger.error(f"Error executing report query: {e}")
+            report_data = []
+            if action == 'generate':
+                flash('Error generating report. Please try again.', 'error')
+        
+    except psycopg2.Error as e:
+        logger.error(f"Database error in reports: {e}")
+        flash('Error loading reports page. Please try again.', 'error')
+        classes, attendees, counselors, groups, report_data = [], [], [], [], []
     
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, groups=groups,
                            report_data=report_data, start_date=start_date, end_date=end_date, 
-                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_id=group_id)
+                           class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_id=group_id, sort_by=sort_by)
 
 @app.route('/manage_groups', methods=['GET', 'POST'])
 @login_required
@@ -698,7 +722,9 @@ def manage_classes():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    # Sorting and filtering parameters
+    # Pagination parameters
+    page = int(request.args.get('page', 1))
+    per_page = 10  # Number of classes per page
     sort_by = request.args.get('sort_by', 'date')
     group_filter = request.args.get('group_filter', 'all')
     start_date = request.args.get('start_date', '')
@@ -841,8 +867,25 @@ def manage_classes():
             conn.rollback()
 
     try:
-        c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
-        counselors = c.fetchall()
+        # Count total classes for pagination
+        count_query = """
+            SELECT COUNT(*) FROM classes c WHERE 1=1
+        """
+        count_params = []
+        if group_filter != 'all':
+            count_query += " AND c.group_name = %s"
+            count_params.append(group_filter)
+        if start_date:
+            count_query += " AND c.date >= %s"
+            count_params.append(start_date)
+        if end_date:
+            count_query += " AND c.date <= %s"
+            count_params.append(end_date)
+        c.execute(count_query, count_params)
+        total_classes = c.fetchone()[0]
+        total_pages = (total_classes + per_page - 1) // per_page
+
+        # Fetch classes with pagination
         classes_query = """
             SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
             FROM classes c
@@ -863,9 +906,14 @@ def manage_classes():
             classes_query += " ORDER BY c.group_name ASC, c.date ASC"
         else:
             classes_query += " ORDER BY c.date ASC"
+        classes_query += " LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
+        
         c.execute(classes_query, params)
         classes = c.fetchall()
-        c.execute("SELECT id, full_name, attendee_id FROM attendees")
+        c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
+        counselors = c.fetchall()
+        c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")
         groups = c.fetchall()
@@ -879,17 +927,18 @@ def manage_classes():
                 LEFT JOIN groups g ON ag.group_id = g.id
                 WHERE ca.class_id = %s
                 GROUP BY a.id
+                ORDER BY a.full_name ASC
             """, (class_[0],))
             class_attendees[class_[0]] = c.fetchall()
     except psycopg2.Error as e:
         logger.error(f"Database error in manage_classes data fetch: {e}")
         flash('Error loading classes. Please try again.', 'error')
         conn.close()
-        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date)
+        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
     finally:
         conn.close()
 
-    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date)
+    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
 
 @app.route('/counselor_manage_classes', methods=['GET', 'POST'])
 @login_required
@@ -898,7 +947,9 @@ def counselor_manage_classes():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    # Sorting and filtering parameters
+    # Pagination parameters
+    page = int(request.args.get('page', 1))
+    per_page = 10  # Number of classes per page
     sort_by = request.args.get('sort_by', 'date')
     group_filter = request.args.get('group_filter', 'all')
     start_date = request.args.get('start_date', '')
@@ -910,6 +961,14 @@ def counselor_manage_classes():
         try:
             if action == 'edit':
                 class_id = request.form['class_id']
+                c.execute("SELECT locked FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
+                if class_info[0]:
+                    flash('This class is locked and cannot be edited', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 group_name = request.form['group_name']
                 class_name = request.form['class_name']
                 date = request.form['date']
@@ -923,6 +982,9 @@ def counselor_manage_classes():
                 propagate = request.form.get('propagate', 'off') == 'on'
                 c.execute("UPDATE classes SET group_name = %s, class_name = %s, date = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s AND counselor_id = %s",
                           (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency, class_id, current_user.id))
+                if c.rowcount == 0:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 conn.commit()
                 attendee_ids = request.form.getlist('attendee_ids')
                 c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
@@ -933,7 +995,7 @@ def counselor_manage_classes():
                 logger.info(f"Class {class_id} updated successfully by counselor {current_user.id}")
                 flash('Class updated successfully')
                 if propagate and recurring:
-                    c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s",
+                    c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s AND locked = FALSE",
                               (class_name, counselor_id, date))
                     future_ids = [row[0] for row in c.fetchall()]
                     for future_id in future_ids:
@@ -948,15 +1010,21 @@ def counselor_manage_classes():
                     flash('Changes propagated to future recurring classes')
             elif action == 'delete' or action == 'delete_all_future':
                 class_id = request.form['class_id']
+                c.execute("SELECT locked, class_name, counselor_id, date FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
+                if class_info[0]:
+                    flash('This class is locked and cannot be deleted', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 if action == 'delete_all_future':
-                    c.execute("SELECT class_name, counselor_id, date FROM classes WHERE id = %s", (class_id,))
-                    class_info = c.fetchone()
-                    class_name, counselor_id, current_date = class_info
-                    c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                    class_name, counselor_id, current_date = class_info[1], class_info[2], class_info[3]
+                    c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND locked = FALSE)",
                               (class_name, counselor_id, current_date))
-                    c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                    c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND locked = FALSE)",
                               (class_name, counselor_id, current_date))
-                    c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s",
+                    c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND locked = FALSE",
                               (class_name, counselor_id, current_date))
                     conn.commit()
                     flash('Class and all future recurring instances deleted successfully')
@@ -968,6 +1036,14 @@ def counselor_manage_classes():
                     flash('Class deleted successfully')
             elif action == 'assign_attendee':
                 class_id = request.form['class_id']
+                c.execute("SELECT locked FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
+                if class_info[0]:
+                    flash('This class is locked and cannot be edited', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 attendee_id = request.form['attendee_id']
                 c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                           (class_id, attendee_id))
@@ -975,12 +1051,28 @@ def counselor_manage_classes():
                 flash('Attendee assigned successfully')
             elif action == 'unassign_attendee':
                 class_id = request.form['class_id']
+                c.execute("SELECT locked FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
+                if class_info[0]:
+                    flash('This class is locked and cannot be edited', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 attendee_id = request.form['attendee_id']
                 c.execute("DELETE FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
                 conn.commit()
                 flash('Attendee unassigned successfully')
             elif action == 'assign_group':
                 class_id = request.form['class_id']
+                c.execute("SELECT locked FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    flash('Class not found or you are not authorized', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
+                if class_info[0]:
+                    flash('This class is locked and cannot be edited', 'error')
+                    return redirect(url_for('counselor_manage_classes'))
                 group_id = request.form['group_id']
                 c.execute("SELECT attendee_id FROM attendee_groups WHERE group_id = %s", (group_id,))
                 attendee_ids = [row[0] for row in c.fetchall()]
@@ -1005,8 +1097,25 @@ def counselor_manage_classes():
             conn.rollback()
 
     try:
-        c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
-        counselors = c.fetchall()
+        # Count total classes for pagination
+        count_query = """
+            SELECT COUNT(*) FROM classes c WHERE c.counselor_id = %s
+        """
+        count_params = [current_user.id]
+        if group_filter != 'all':
+            count_query += " AND c.group_name = %s"
+            count_params.append(group_filter)
+        if start_date:
+            count_query += " AND c.date >= %s"
+            count_params.append(start_date)
+        if end_date:
+            count_query += " AND c.date <= %s"
+            count_params.append(end_date)
+        c.execute(count_query, count_params)
+        total_classes = c.fetchone()[0]
+        total_pages = (total_classes + per_page - 1) // per_page
+
+        # Fetch classes with pagination
         classes_query = """
             SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
             FROM classes c
@@ -1027,8 +1136,13 @@ def counselor_manage_classes():
             classes_query += " ORDER BY c.group_name ASC, c.date ASC"
         else:
             classes_query += " ORDER BY c.date ASC"
+        classes_query += " LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
+        
         c.execute(classes_query, params)
         classes = c.fetchall()
+        c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
+        counselors = c.fetchall()
         c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")
@@ -1050,102 +1164,11 @@ def counselor_manage_classes():
         logger.error(f"Database error in counselor_manage_classes data fetch: {e}")
         flash('Error loading classes. Please try again.', 'error')
         conn.close()
-        return render_template('counselor_manage_classes.html', classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date)
+        return render_template('counselor_manage_classes.html', classes=[], attendees=[], class_attendees={}, groups=[], counselors=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
     finally:
         conn.close()
 
-    return render_template('counselor_manage_classes.html', classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, counselors=counselors)
-
-@app.route('/manage_attendees', methods=['GET', 'POST'])
-@login_required
-def manage_attendees():
-    if current_user.role != 'admin':
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    group_filter = request.args.get('group_filter', 'all')
-    if request.method == 'POST':
-        action = request.form.get('action')
-        try:
-            if action == 'add':
-                full_name = request.form['full_name']
-                attendee_id = request.form['attendee_id']
-                group_details = request.form['group_details']
-                notes = request.form['notes']
-                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
-                          (full_name, attendee_id, group_details, notes))
-                new_attendee_id = c.fetchone()[0]
-                conn.commit()
-                group_ids = request.form.getlist('group_ids')
-                for group_id in group_ids:
-                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (new_attendee_id, group_id))
-                conn.commit()
-                flash('Attendee added successfully')
-            elif action == 'edit':
-                attendee_id = request.form['attendee_id']
-                full_name = request.form['full_name']
-                new_attendee_id = request.form['new_attendee_id']
-                group_details = request.form['group_details']
-                notes = request.form['notes']
-                c.execute("UPDATE attendees SET full_name = %s, attendee_id = %s, group_details = %s, notes = %s WHERE id = %s",
-                          (full_name, new_attendee_id, group_details, notes, attendee_id))
-                conn.commit()
-                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
-                group_ids = request.form.getlist('group_ids')
-                for group_id in group_ids:
-                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                              (attendee_id, group_id))
-                conn.commit()
-                flash('Attendee updated successfully')
-            elif action == 'delete':
-                attendee_id = request.form['attendee_id']
-                c.execute("DELETE FROM class_attendees WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendance WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
-                c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
-                conn.commit()
-                flash('Attendee deleted successfully')
-        except psycopg2.IntegrityError:
-            flash('Attendee ID already exists')
-        except psycopg2.Error as e:
-            logger.error(f"Database error in manage_attendees: {e}")
-            flash('Error processing your request. Please try again.', 'error')
-        except Exception as e:
-            logger.error(f"Unexpected error in manage_attendees: {e}")
-            flash('An unexpected error occurred. Please try again.', 'error')
-    try:
-        attendees_query = """
-            SELECT a.id, a.full_name, a.attendee_id, a.group_details, a.notes
-            FROM attendees a
-            WHERE 1=1
-        """
-        params = []
-        if group_filter != 'all':
-            attendees_query += " AND EXISTS (SELECT 1 FROM attendee_groups ag JOIN groups g ON ag.group_id = g.id WHERE ag.attendee_id = a.id AND g.name = %s)"
-            params.append(group_filter)
-        attendees_query += " ORDER BY a.full_name ASC"
-        c.execute(attendees_query, params)
-        attendees = c.fetchall()
-        c.execute("SELECT id, name FROM groups ORDER BY name")
-        groups = c.fetchall()
-        attendee_groups = {}
-        for attendee in attendees:
-            c.execute("""
-                SELECT g.id, g.name FROM groups g
-                JOIN attendee_groups ag ON g.id = ag.group_id
-                WHERE ag.attendee_id = %s
-            """, (attendee[0],))
-            attendee_groups[attendee[0]] = c.fetchall()
-    except psycopg2.Error as e:
-        logger.error(f"Database error in manage_attendees data fetch: {e}")
-        flash('Error loading attendees. Please try again.', 'error')
-        conn.close()
-        return render_template('manage_attendees.html', attendees=[], groups=[], attendee_groups={}, group_filter=group_filter)
-    finally:
-        conn.close()
-
-    return render_template('manage_attendees.html', attendees=attendees, groups=groups, attendee_groups=attendee_groups, group_filter=group_filter)
+    return render_template('counselor_manage_classes.html', classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, counselors=counselors, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
 
 @app.route('/logout')
 @login_required
@@ -1171,10 +1194,10 @@ def counselor_dashboard():
         counselor_name, counselor_credentials = counselor
         today = datetime.today().strftime('%Y-%m-%d')
         logger.info(f"Fetching classes for counselor_id: {current_user.id}, date: {today}")
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date = %s",
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date = %s ORDER BY group_name, group_hours",
                   (current_user.id, today))
         today_classes = c.fetchall()
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s ORDER BY date ASC",
                   (current_user.id, (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d'), (datetime.today() + timedelta(days=7)).strftime('%Y-%m-%d')))
         upcoming_classes = c.fetchall()
         c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date < %s ORDER BY date DESC LIMIT 10",

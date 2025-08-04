@@ -39,28 +39,6 @@
         </form>
     </div>
 
-    <!-- Pagination Controls -->
-    <div class="mb-6 flex justify-between items-center">
-        <div class="text-sm text-gray-700">
-            Showing {{ (current_page - 1) * page_size + 1 }} to {{ [((current_page - 1) * page_size + page_size), classes|length + (current_page - 1) * page_size]|min }} of {{ total_classes }} classes
-        </div>
-        <div class="flex space-x-2">
-            {% if current_page > 1 %}
-            <a href="{{ url_for('manage_classes', page=current_page-1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
-            {% endif %}
-            {% for p in range(1, total_pages + 1) %}
-            {% if p == current_page %}
-            <span class="bg-blue-800 text-white p-2 rounded text-sm">{{ p }}</span>
-            {% else %}
-            <a href="{{ url_for('manage_classes', page=p, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">{{ p }}</a>
-            {% endif %}
-            {% endfor %}
-            {% if current_page < total_pages %}
-            <a href="{{ url_for('manage_classes', page=current_page+1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
-            {% endif %}
-        </div>
-    </div>
-
     <!-- Add Class Modal -->
     <div class="mb-6">
         <button onclick="openModal('addClassModal')" class="bg-blue-600 text-white p-2 rounded text-sm">Add Class</button>
@@ -146,6 +124,8 @@
                     <button type="submit" form="unassignForm{{ class[0] }}_{{ attendee[0] }}" class="text-red-600 text-xs ml-2">Unassign</button>
                 </form>
             </li>
+            {% else %}
+            <li class="text-xs text-gray-500">No attendees assigned</li>
             {% endfor %}
         </ul>
         <div class="mt-2">
@@ -308,29 +288,20 @@
         </div>
     </div>
     {% else %}
-    <p class="text-sm text-gray-500">No classes found for the selected filters.</p>
+    <p class="text-sm text-gray-500">No classes found.</p>
     {% endfor %}
 
-    <!-- Pagination Controls (Bottom) -->
-    <div class="mt-6 flex justify-between items-center">
-        <div class="text-sm text-gray-700">
-            Showing {{ (current_page - 1) * page_size + 1 }} to {{ [((current_page - 1) * page_size + page_size), classes|length + (current_page - 1) * page_size]|min }} of {{ total_classes }} classes
-        </div>
-        <div class="flex space-x-2">
-            {% if current_page > 1 %}
-            <a href="{{ url_for('manage_classes', page=current_page-1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
-            {% endif %}
-            {% for p in range(1, total_pages + 1) %}
-            {% if p == current_page %}
-            <span class="bg-blue-800 text-white p-2 rounded text-sm">{{ p }}</span>
-            {% else %}
-            <a href="{{ url_for('manage_classes', page=p, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">{{ p }}</a>
-            {% endif %}
-            {% endfor %}
-            {% if current_page < total_pages %}
-            <a href="{{ url_for('manage_classes', page=current_page+1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
-            {% endif %}
-        </div>
+    <!-- Pagination Controls -->
+    <div class="mt-6 flex justify-center items-center space-x-2">
+        {% if page > 1 %}
+        <a href="{{ url_for('manage_classes', page=page-1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+        <a href="{{ url_for('manage_classes', page=p, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="p-2 rounded text-sm {% if p == page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="{{ url_for('manage_classes', page=page+1, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
+        {% endif %}
     </div>
 
     <!-- JavaScript for Modals -->

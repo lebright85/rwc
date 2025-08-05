@@ -5,26 +5,9 @@
 
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 class="text-lg font-bold mb-4">Generate Report</h2>
-        <form method="POST">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium">Start Date</label>
-                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2 text-sm" required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium">End Date</label>
-                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2 text-sm" required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium">Group</label>
-                    <select name="group_id" class="w-full border rounded p-2 text-sm">
-                        <option value="all" {% if group_id == 'all' %}selected{% endif %}>All Groups</option>
-                        {% for group in groups %}
-                        <option value="{{ group[0] }}" {% if group_id == group[0]|string %}selected{% endif %}>{{ group[1] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+        <h2 class="text-lg font-bold mb-4">Filter Report</h2>
+        <form method="POST" id="reportForm">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Class</label>
                     <select name="class_id" class="w-full border rounded p-2 text-sm">
@@ -53,6 +36,23 @@
                     </select>
                 </div>
                 <div>
+                    <label class="block text-sm font-medium">Group</label>
+                    <select name="group_id" class="w-full border rounded p-2 text-sm">
+                        <option value="all" {% if group_id == 'all' %}selected{% endif %}>All Groups</option>
+                        {% for group in groups %}
+                        <option value="{{ group[0] }}" {% if group_id == group[0]|string %}selected{% endif %}>{{ group[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Start Date</label>
+                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">End Date</label>
+                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
                     <label class="block text-sm font-medium">Sort By</label>
                     <select name="sort_by" class="w-full border rounded p-2 text-sm">
                         <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
@@ -60,61 +60,56 @@
                     </select>
                 </div>
             </div>
-            <div class="mt-4 flex justify-end space-x-4">
+            <div class="mt-4 flex justify-end space-x-2">
                 <button type="submit" name="action" value="generate" class="bg-blue-600 text-white p-2 rounded text-sm">Generate Report</button>
                 <button type="submit" name="action" value="download_csv" class="bg-green-600 text-white p-2 rounded text-sm">Download CSV</button>
             </div>
         </form>
     </div>
 
-    <!-- Report Results -->
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-lg font-bold mb-4">Report Results</h2>
-        {% if report_data %}
-        {% for data in report_data %}
-        <div class="mb-6">
-            <h3 class="text-md font-bold">
-                Class: {{ data.class[1] }} ({{ data.class[2] }}, {{ data.class[3] }}, {{ data.class[4] }}, {{ data.class[5] }})
-            </h3>
-            <p class="text-sm mb-2">Counselor: {{ data.class[6] }}{% if data.class[7] %}, {{ data.class[7] }}{% endif %}</p>
-            <p class="text-sm text-gray-500 mb-2">Debug: {{ data.attendees|length }} attendees found</p>
-            {% if data.attendees %}
-            <table class="w-full border-collapse">
-                <thead>
-                    <tr class="bg-gray-200">
-                        <th class="border p-2 text-sm">Attendee Name</th>
-                        <th class="border p-2 text-sm">Attendee ID</th>
-                        <th class="border p-2 text-sm">Groups</th>
-                        <th class="border p-2 text-sm">Status</th>
-                        <th class="border p-2 text-sm">Time In</th>
-                        <th class="border p-2 text-sm">Time Out</th>
-                        <th class="border p-2 text-sm">Notes</th>
-                        <th class="border p-2 text-sm">Location</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for attendee in data.attendees %}
-                    <tr>
-                        <td class="border p-2 text-sm">{{ attendee[0] }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[1] }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[2] or 'N/A' }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[3] or 'Present' }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[4] or 'N/A' }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[5] or 'N/A' }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[6] or 'N/A' }}</td>
-                        <td class="border p-2 text-sm">{{ attendee[7] or 'N/A' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p class="text-sm">No attendees found for this class.</p>
-            {% endif %}
-        </div>
-        {% endfor %}
-        {% else %}
-        <p class="text-sm">No data available for the selected filters.</p>
-        {% endif %}
+    <!-- Report Data -->
+    {% for data in report_data %}
+    <div class="border-b py-4 last:border-b-0">
+        <h3 class="text-md font-bold">
+            Class: {{ data.class[1] }} (Group {{ data.class[2] }}, {{ data.class[3] }}, {{ data.class[4] }}, {{ data.class[5] }})
+        </h3>
+        <p class="text-sm">Counselor: {{ data.class[6] }}{% if data.class[7] %}, {{ data.class[7] }}{% endif %}</p>
+        <p class="text-sm font-medium mt-2">Attendance Summary: Present: {{ data.present_count }}, Absent: {{ data.absent_count }}</p>
+        <table class="min-w-full bg-white border mt-2">
+            <thead>
+                <tr>
+                    <th class="border px-2 py-1 text-xs text-left">Attendee Name</th>
+                    <th class="border px-2 py-1 text-xs text-left">Attendee ID</th>
+                    <th class="border px-2 py-1 text-xs text-left">Groups</th>
+                    <th class="border px-2 py-1 text-xs text-left">Attendance Status</th>
+                    <th class="border px-2 py-1 text-xs text-left">Time In</th>
+                    <th class="border px-2 py-1 text-xs text-left">Time Out</th>
+                    <th class="border px-2 py-1 text-xs text-left">Notes</th>
+                    <th class="border px-2 py-1 text-xs text-left">Location</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for attendee in data.attendees %}
+                <tr>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[0] }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[1] }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[2] or 'N/A' }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[3] }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[4] or '' }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[5] or '' }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[6] or '' }}</td>
+                    <td class="border px-2 py-1 text-xs">{{ attendee[7] or '' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="border px-2 py-1 text-xs text-center">No attendees found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No report data available.</p>
+    {% endfor %}
 </div>
 {% endblock %}

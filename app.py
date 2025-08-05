@@ -487,9 +487,24 @@ def reports():
                 c.execute(attendee_query, attendee_params)
                 attendee_records = c.fetchall()
                 logger.info(f"Retrieved {len(attendee_records)} attendees for class_id {class_id}: {[r[0] for r in attendee_records]}")
+
+                # Calculate present and absent counts
+                c.execute("""
+                    SELECT 
+                        SUM(CASE WHEN a.attendance_status = 'Present' THEN 1 ELSE 0 END) AS present_count,
+                        SUM(CASE WHEN a.attendance_status = 'Absent' THEN 1 ELSE 0 END) AS absent_count
+                    FROM attendance a
+                    WHERE a.class_id = %s
+                """, (class_id,))
+                counts = c.fetchone()
+                present_count = counts[0] or 0
+                absent_count = counts[1] or 0
+
                 report_data.append({
                     'class': class_record,
-                    'attendees': attendee_records
+                    'attendees': attendee_records,
+                    'present_count': present_count,
+                    'absent_count': absent_count
                 })
             
             if not report_data and action == 'generate':

@@ -103,14 +103,18 @@
     </div>
 
     <!-- Classes List -->
+    {% if not classes %}
+    <p class="text-sm text-gray-500">No classes found. {% if group_filter != 'all' or start_date or end_date %}Try adjusting your filters.{% endif %}</p>
+    {% endif %}
     {% for class in classes %}
     <div class="border-b py-4 last:border-b-0">
         <h3 class="text-md font-bold">
             Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[8] }})
             {% if class[12] %} (Locked) {% endif %}
+            {% if class[9] == 1 %} (Recurring: {{ class[10] or 'weekly' }}) {% else %} (Non-recurring) {% endif %}
         </h3>
         <p>Counselor: {{ class[11] }}</p>
-        <p>Type: {{ class[6] }} | Notes: {{ class[7] }} | Recurring: {{ 'Yes' if class[9] else 'No' }} | Frequency: {{ class[10] or 'N/A' }}</p>
+        <p>Type: {{ class[6] }} | Notes: {{ class[7] }} | Recurring: {{ 'Yes' if class[9] == 1 else 'No' }} | Frequency: {{ class[10] or 'N/A' }}</p>
         <h4 class="text-sm font-medium mt-2">Assigned Attendees</h4>
         <ul class="list-disc ml-5">
             {% for attendee in class_attendees[class[0]] %}
@@ -185,7 +189,7 @@
                         <input type="text" name="location" value="{{ class[8] }}" class="w-full border rounded p-1 text-sm">
                     </div>
                     <div class="mb-2 flex items-center">
-                        <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] %}checked{% endif %} class="mr-1">
+                        <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] == 1 %}checked{% endif %} class="mr-1">
                         <label for="recurring_{{ class[0] }}" class="text-sm">Recurring</label>
                     </div>
                     <div class="mb-2">
@@ -228,11 +232,14 @@
                         <label class="block text-sm font-medium">Delete Option</label>
                         <select name="action" class="w-full border rounded p-1 text-sm" required>
                             <option value="delete">Delete this class only</option>
-                            {% if class[9] %}
+                            {% if class[9] == 1 %}
                             <option value="delete_all_future">Delete this and future classes</option>
                             {% endif %}
                         </select>
                     </div>
+                    {% if class[9] != 1 %}
+                    <p class="text-sm text-gray-500">Note: This class is not marked as recurring. Only single deletion is available.</p>
+                    {% endif %}
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('deleteClassModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
                         <button type="submit" form="deleteClassForm{{ class[0] }}" class="bg-red-600 text-white p-1 rounded text-sm">Delete</button>
@@ -287,8 +294,6 @@
             </div>
         </div>
     </div>
-    {% else %}
-    <p class="text-sm text-gray-500">No classes found.</p>
     {% endfor %}
 
     <!-- Pagination Controls -->

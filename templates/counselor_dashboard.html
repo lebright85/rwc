@@ -1,56 +1,74 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold mb-6">Counselor Dashboard: {{ counselor_name }}{% if counselor_credentials %}, {{ counselor_credentials }}{% endif %}</h1>
+    <h1 class="text-2xl font-bold mb-6">Counselor Dashboard</h1>
+    <h2 class="text-lg font-bold mb-4">Welcome, {{ counselor_name }}{% if counselor_credentials %}, {{ counselor_credentials }}{% endif %}</h2>
+    <a href="{{ url_for('counselor_manage_classes') }}" class="bg-blue-600 text-white p-2 rounded text-sm mb-4 inline-block">Manage Classes</a>
 
-    <div class="mt-6">
-        <a href="{{ url_for('counselor_manage_classes') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Classes</a>
-        <a href="{{ url_for('logout') }}" class="bg-gray-600 text-white p-2 rounded text-sm">Logout</a>
-    </div>
-
-    <h2 class="text-lg font-bold mt-6 mb-4">Today's Classes ({{ today }})</h2>
-    {% for class in today_classes %}
-    <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
-            {% if class[6] %} (Locked) {% endif %}
-        </h3>
-        <div class="mt-2">
-            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">Manage Attendance</a>
+    <!-- Today Classes -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-bold mb-4">Today's Classes ({{ today }})</h3>
+        {% if today_classes %}
+        <div class="grid grid-cols-1 gap-4">
+            {% for class in today_classes %}
+            <div class="border p-4 rounded-lg">
+                <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
+                <p class="text-sm">Time: {{ class[4] }} | Location: {{ class[5] }}{% if class[6] %} | Locked{% endif %}</p>
+                <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="text-blue-600 hover:underline text-sm">Manage Attendance</a>
+            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No classes scheduled for today.</p>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="text-sm text-gray-500">No classes scheduled for today.</p>
-    {% endfor %}
 
-    <h2 class="text-lg font-bold mt-6 mb-4">Upcoming Classes</h2>
-    {% for class in upcoming_classes %}
-    <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
-            {% if class[6] %} (Locked) {% endif %}
-        </h3>
-        <div class="mt-2">
-            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">Manage Attendance</a>
+    <!-- Upcoming Classes -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-bold mb-4">Upcoming Classes</h3>
+        {% if upcoming_classes %}
+        <div class="grid grid-cols-1 gap-4">
+            {% for class in upcoming_classes %}
+            <div class="border p-4 rounded-lg">
+                <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
+                <p class="text-sm">Date: {{ class[3] }} | Time: {{ class[4] }} | Location: {{ class[5] }}{% if class[6] %} | Locked{% endif %}</p>
+                <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="text-blue-600 hover:underline text-sm">Manage Attendance</a>
+            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No upcoming classes in the next 7 days.</p>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="text-sm text-gray-500">No upcoming classes scheduled.</p>
-    {% endfor %}
 
-    <h2 class="text-lg font-bold mt-6 mb-4">Past Classes (Last 10)</h2>
-    {% for class in past_classes %}
-    <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
-            {% if class[6] %} (Locked) {% endif %}
-        </h3>
-        <div class="mt-2">
-            <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="bg-blue-600 text-white p-1 rounded text-sm">View Attendance</a>
+    <!-- Past Classes -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-lg font-bold mb-4">Past Classes</h3>
+        {% if past_classes %}
+        <div class="grid grid-cols-1 gap-4">
+            {% for class in past_classes %}
+            <div class="border p-4 rounded-lg">
+                <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
+                <p class="text-sm">Date: {{ class[3] }} | Time: {{ class[4] }} | Location: {{ class[5] }}{% if class[6] %} | Locked{% endif %}</p>
+                <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="text-blue-600 hover:underline text-sm">View Attendance</a>
+            </div>
+            {% endfor %}
         </div>
+        <!-- Pagination Controls -->
+        <div class="mt-6 flex justify-center items-center space-x-2">
+            {% if past_page > 1 %}
+            <a href="{{ url_for('counselor_dashboard', past_page=past_page-1) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
+            {% endif %}
+            {% for p in range(1, total_past_pages + 1) %}
+            <a href="{{ url_for('counselor_dashboard', past_page=p) }}" class="p-2 rounded text-sm {% if p == past_page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
+            {% endfor %}
+            {% if past_page < total_past_pages %}
+            <a href="{{ url_for('counselor_dashboard', past_page=past_page+1) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No past classes found.</p>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="text-sm text-gray-500">No past classes found.</p>
-    {% endfor %}
 </div>
 {% endblock %}

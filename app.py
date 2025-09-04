@@ -1328,22 +1328,39 @@ def counselor_dashboard():
             return redirect(url_for('login'))
         counselor_name, counselor_credentials = counselor
         today = datetime.today().strftime('%Y-%m-%d')
+        past_page = int(request.args.get('past_page', 1))
+        per_page = 10
+
+        # Today classes
         logger.info(f"Fetching classes for counselor_id: {current_user.id}, date: {today}")
         c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date = %s",
                   (current_user.id, today))
         today_classes = c.fetchall()
+
+        # Upcoming classes
         c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
                   (current_user.id, (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d'), (datetime.today() + timedelta(days=7)).strftime('%Y-%m-%d')))
         upcoming_classes = c.fetchall()
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date < %s ORDER BY date DESC LIMIT 10",
-                  (current_user.id, today))
+
+        # Past classes with pagination
+        count_query = "SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND date < %s"
+        c.execute(count_query, (current_user.id, today))
+        total_past_classes = c.fetchone()[0]
+        total_past_pages = math.ceil(total_past_classes / per_page)
+        past_page = max(1, min(past_page, total_past_pages))  # Ensure page is within bounds
+        offset = (past_page - 1) * per_page
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date < %s ORDER BY date DESC LIMIT %s OFFSET %s",
+                  (current_user.id, today, per_page, offset))
         past_classes = c.fetchall()
+        logger.info(f"Retrieved {len(past_classes)} past classes for counselor_id: {current_user.id}, page: {past_page}")
+
         for cls in today_classes + upcoming_classes + past_classes:
             if None in cls:
                 logger.warning(f"Invalid class data: {cls}")
         conn.close()
         return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes, past_classes=past_classes,
-                               today=today, counselor_name=counselor_name, counselor_credentials=counselor_credentials)
+                               today=today, counselor_name=counselor_name, counselor_credentials=counselor_credentials,
+                               past_page=past_page, total_past_pages=total_past_pages)
     except psycopg2.Error as e:
         logger.error(f"Database error in counselor_dashboard: {e}")
         flash('Error loading dashboard. Please try again.', 'error')

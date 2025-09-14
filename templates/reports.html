@@ -67,6 +67,20 @@
         </form>
     </div>
 
+    <!-- Group Attendee Totals Summary -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-lg font-bold mb-4">Group Attendee Totals</h2>
+        {% if group_attendee_counts %}
+        <ul class="list-disc ml-5">
+            {% for group_name, count in group_attendee_counts.items() %}
+            <li class="text-sm">Group {{ group_name }}: {{ count }} unique attendees</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-gray-500">No group attendee data available for the selected filters.</p>
+        {% endif %}
+    </div>
+
     <!-- Report Data -->
     {% for data in report_data %}
     <div class="border-b py-4 last:border-b-0">
@@ -75,6 +89,7 @@
         </h3>
         <p class="text-sm">Counselor: {{ data.class[6] }}{% if data.class[7] %}, {{ data.class[7] }}{% endif %}</p>
         <p class="text-sm font-medium mt-2">Attendance Summary: Present: {{ data.present_count }}, Absent: {{ data.absent_count }}</p>
+        <p class="text-sm font-medium">Group Attendee Total: {{ group_attendee_counts.get(data.class[2], 0) }} unique attendees</p>
         <table class="min-w-full bg-white border mt-2">
             <thead>
                 <tr>

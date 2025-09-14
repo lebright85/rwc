@@ -464,6 +464,33 @@ def reports():
             class_records = c.fetchall()
             logger.info(f"Retrieved {len(class_records)} classes for report: {[r[1] for r in class_records]}")
 
+            # Calculate group attendee totals
+            group_attendee_counts = {}
+            group_query = """
+                SELECT c.group_name, COUNT(DISTINCT ca.attendee_id) as attendee_count
+                FROM classes c
+                JOIN class_attendees ca ON c.id = ca.class_id
+                WHERE 1=1
+            """
+            group_params = []
+            if start_date and end_date:
+                group_query += " AND c.date >= %s AND c.date <= %s"
+                group_params.extend([start_date, end_date])
+            if class_id and class_id != 'all':
+                group_query += " AND c.id = %s"
+                group_params.append(int(class_id))
+            if counselor_id and counselor_id != 'all':
+                group_query += " AND c.counselor_id = %s"
+                group_params.append(int(counselor_id))
+            if group_id and group_id != 'all':
+                group_query += " AND EXISTS (SELECT 1 FROM attendee_groups ag WHERE ag.attendee_id = ca.attendee_id AND ag.group_id = %s)"
+                group_params.append(int(group_id))
+            group_query += " GROUP BY c.group_name"
+            c.execute(group_query, group_params)
+            for row in c.fetchall():
+                group_attendee_counts[row[0]] = row[1]
+            logger.info(f"Group attendee counts: {group_attendee_counts}")
+
             report_data = []
             for class_record in class_records:
                 class_id = class_record[0]
@@ -515,19 +542,21 @@ def reports():
                     output = io.StringIO()
                     writer = csv.writer(output)
                     writer.writerow(['Class Name', 'Group Name', 'Date', 'Group Hours', 'Location',
-                                     'Counselor', 'Counselor Credentials', 'Attendee Name', 'Attendee ID',
-                                     'Groups', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
+                                     'Counselor', 'Counselor Credentials', 'Present Count', 'Absent Count', 'Group Attendee Total',
+                                     'Attendee Name', 'Attendee ID', 'Groups', 'Attendance Status', 'Time In', 'Time Out', 'Notes', 'Attendee Location'])
                     for data in report_data:
                         class_record = data['class']
+                        group_attendee_total = group_attendee_counts.get(class_record[2], 0)
                         class_info = [
                             class_record[1], class_record[2], class_record[3], class_record[4],
-                            class_record[5], class_record[6], class_record[7] or ''
+                            class_record[5], class_record[6], class_record[7] or '',
+                            data['present_count'], data['absent_count'], group_attendee_total
                         ]
                         if not data['attendees']:
                             writer.writerow(class_info + ['No attendees', '', '', '', '', '', ''])
                         else:
                             for idx, attendee in enumerate(data['attendees']):
-                                row = class_info if idx == 0 else ['', '', '', '', '', '', '']
+                                row = class_info if idx == 0 else ['', '', '', '', '', '', '', '', '', '']
                                 row += [
                                     attendee[0] or 'No attendees', attendee[1] or '',
                                     attendee[2] or 'N/A', attendee[3] or 'Present',
@@ -537,7 +566,7 @@ def reports():
                                 writer.writerow(row)
                     csv_content = output.getvalue()
                     output.close()
-                    logger.info("CSV file generated successfully")
+                    logger.info("CSV file generated successfully with present/absent counts and group attendee totals")
                     conn.close()
                     return Response(
                         csv_content,
@@ -559,11 +588,12 @@ def reports():
     except psycopg2.Error as e:
         logger.error(f"Database error in reports: {e}")
         flash('Error loading reports page. Please try again.', 'error')
-        classes, attendees, counselors, groups, report_data = [], [], [], [], []
+        classes, attendees, counselors, groups, report_data, group_attendee_counts = [], [], [], [], [], {}
     
     conn.close()
     return render_template('reports.html', classes=classes, attendees=attendees, counselors=counselors, groups=groups,
-                           report_data=report_data, start_date=start_date, end_date=end_date, 
+                           report_data=report_data, group_attendee_counts=group_attendee_counts,
+                           start_date=start_date, end_date=end_date, 
                            class_id=class_id, attendee_id=attendee_id, counselor_id=counselor_id, group_id=group_id, sort_by=sort_by)
 
 @app.route('/manage_groups', methods=['GET', 'POST'])

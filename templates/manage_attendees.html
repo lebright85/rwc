@@ -6,7 +6,7 @@
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Filter Attendees</h2>
-        <form method="GET">
+        <form method="GET" id="filterAttendeesForm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Group</label>
@@ -17,50 +17,56 @@
                         {% endfor %}
                     </select>
                 </div>
-            </div>
-            <div class="mt-4 flex justify-end">
-                <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Filter</button>
+                <div class="mt-4">
+                    <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Filter</button>
+                </div>
             </div>
         </form>
     </div>
 
-    <!-- Add Attendee Modal -->
+    <!-- Add Attendee Button -->
     <div class="mb-6">
         <button onclick="openModal('addAttendeeModal')" class="bg-blue-600 text-white p-2 rounded text-sm">Add Attendee</button>
     </div>
+
+    <!-- Add Attendee Modal -->
     <div id="addAttendeeModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md max-h-[60vh] overflow-y-auto">
-            <h2 class="text-lg font-bold mb-4">Add Attendee</h2>
-            <form method="POST">
+        <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+            <h2 class="text-lg font-bold mb-2">Add Attendee</h2>
+            <form method="POST" id="addAttendeeForm">
                 <input type="hidden" name="action" value="add">
-                <div class="mb-4">
+                <div class="mb-2">
                     <label class="block text-sm font-medium">Full Name</label>
-                    <input type="text" name="full_name" class="w-full border rounded p-2 text-sm" required>
+                    <input type="text" name="full_name" class="w-full border rounded p-1 text-sm" required>
                 </div>
-                <div class="mb-4">
+                <div class="mb-2">
                     <label class="block text-sm font-medium">Attendee ID</label>
-                    <input type="text" name="attendee_id" class="w-full border rounded p-2 text-sm" required>
+                    <input type="text" name="attendee_id" class="w-full border rounded p-1 text-sm" required>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Groups</label>
-                    <select name="group_ids" multiple class="w-full border rounded p-2 text-sm">
-                        {% for group in groups %}
-                        <option value="{{ group[0] }}">{{ group[1] }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-1">Hold Cmd/Ctrl to select multiple groups</p>
-                </div>
-                <div class="mb-4">
+                <div class="mb-2">
                     <label class="block text-sm font-medium">Group Details</label>
-                    <input type="text" name="group_details" class="w-full border rounded p-2 text-sm">
+                    <input type="text" name="group_details" class="w-full border rounded p-1 text-sm">
                 </div>
-                <div class="mb-4">
+                <div class="mb-2">
                     <label class="block text-sm font-medium">Notes</label>
-                    <textarea name="notes" class="w-full border rounded p-2 text-sm"></textarea>
+                    <textarea name="notes" class="w-full border rounded p-1 text-sm h-16"></textarea>
                 </div>
-                <div class="flex justify-end">
-                    <button type="button" onclick="closeModal('addAttendeeModal')" class="mr-2 bg-gray-300 p-2 rounded text-sm">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Add</button>
+                <div class="mb-2">
+                    <label class="block text-sm font-medium">Groups</label>
+                    <div class="max-h-32 overflow-y-auto border rounded p-1">
+                        {% for group in groups %}
+                        {% if group[1] != 'Discharged' %}
+                        <div class="flex items-center">
+                            <input type="checkbox" name="group_ids" value="{{ group[0] }}" id="group_{{ group[0] }}" class="mr-1">
+                            <label for="group_{{ group[0] }}" class="text-sm">{{ group[1] }}</label>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="sticky bottom-0 bg-white pt-2 flex justify-end z-10">
+                    <button type="button" onclick="closeModal('addAttendeeModal')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                    <button type="submit" form="addAttendeeForm" class="bg-blue-600 text-white p-1 rounded text-sm">Add</button>
                 </div>
             </form>
         </div>
@@ -69,61 +75,127 @@
     <!-- Attendees List -->
     {% for attendee in attendees %}
     <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Attendee: <a href="{{ url_for('attendee_profile', attendee_id=attendee[0]) }}" class="text-blue-600 hover:underline">{{ attendee[1] }} ({{ attendee[2] }})</a>
-        </h3>
-        <p>Groups: {{ attendee_groups[attendee[0]]|map(attribute='1')|join(', ') or 'N/A' }}</p>
-        <p>Group Details: {{ attendee[3] or 'N/A' }}</p>
-        <p>Notes: {{ attendee[4] or 'N/A' }}</p>
-        <div class="mt-2">
-            <button onclick="openModal('editAttendeeModal{{ attendee[0] }}')" class="bg-blue-600 text-white p-1 rounded mr-2 text-sm">Edit</button>
-            <form method="POST" class="inline">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                <button type="submit" class="bg-red-600 text-white p-1 rounded text-sm" onclick="return confirm('Are you sure you want to delete this attendee?')">Delete</button>
-            </form>
+        <h3 class="text-md font-bold">{{ attendee[1] }} ({{ attendee[2] }})</h3>
+        <p class="text-sm">Group Details: {{ attendee[3] or 'N/A' }} | Notes: {{ attendee[4] or 'N/A' }}</p>
+        <p class="text-sm">Groups: {{ attendee_groups[attendee[0]]|map(attribute='1')|join(', ') or 'None' }}</p>
+        <div class="mt-2 flex space-x-2">
+            <button onclick="openModal('editAttendeeModal{{ attendee[0] }}')" class="bg-blue-600 text-white p-1 rounded text-sm">Edit</button>
+            <button onclick="openModal('deleteAttendeeModal{{ attendee[0] }}')" class="bg-red-600 text-white p-1 rounded text-sm">Delete</button>
+            {% if 'Discharged' not in attendee_groups[attendee[0]]|map(attribute='1') %}
+            <button onclick="openModal('moveToDischargedModal{{ attendee[0] }}')" class="bg-yellow-600 text-white p-1 rounded text-sm">Move to Discharged</button>
+            {% else %}
+            <button onclick="openModal('moveFromDischargedModal{{ attendee[0] }}')" class="bg-green-600 text-white p-1 rounded text-sm">Move to Active Groups</button>
+            {% endif %}
         </div>
-    </div>
 
-    <!-- Edit Attendee Modal -->
-    <div id="editAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md max-h-[60vh] overflow-y-auto">
-            <h2 class="text-lg font-bold mb-4">Edit Attendee</h2>
-            <form method="POST">
-                <input type="hidden" name="action" value="edit">
-                <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Full Name</label>
-                    <input type="text" name="full_name" value="{{ attendee[1] }}" class="w-full border rounded p-2 text-sm" required>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Attendee ID</label>
-                    <input type="text" name="new_attendee_id" value="{{ attendee[2] }}" class="w-full border rounded p-2 text-sm" required>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Groups</label>
-                    <select name="group_ids" multiple class="w-full border rounded p-2 text-sm">
-                        {% for group in groups %}
-                        <option value="{{ group[0] }}" {% if group[0] in attendee_groups[attendee[0]]|map(attribute='0') %}selected{% endif %}>{{ group[1] }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-1">Hold Cmd/Ctrl to select multiple groups</p>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Group Details</label>
-                    <input type="text" name="group_details" value="{{ attendee[3] }}" class="w-full border rounded p-2 text-sm">
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Notes</label>
-                    <textarea name="notes" class="w-full border rounded p-2 text-sm">{{ attendee[4] }}</textarea>
-                </div>
-                <div class="flex justify-end">
-                    <button type="button" onclick="closeModal('editAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-2 rounded text-sm">Cancel</button>
-                    <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Save</button>
-                </div>
-            </form>
+        <!-- Edit Attendee Modal -->
+        <div id="editAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-2">Edit Attendee</h2>
+                <form method="POST" id="editAttendeeForm{{ attendee[0] }}">
+                    <input type="hidden" name="action" value="edit">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Full Name</label>
+                        <input type="text" name="full_name" value="{{ attendee[1] }}" class="w-full border rounded p-1 text-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Attendee ID</label>
+                        <input type="text" name="new_attendee_id" value="{{ attendee[2] }}" class="w-full border rounded p-1 text-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Group Details</label>
+                        <input type="text" name="group_details" value="{{ attendee[3] }}" class="w-full border rounded p-1 text-sm">
+                    </div>
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Notes</label>
+                        <textarea name="notes" class="w-full border rounded p-1 text-sm h-16">{{ attendee[4] }}</textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Groups</label>
+                        <div class="max-h-32 overflow-y-auto border rounded p-1">
+                            {% for group in groups %}
+                            {% if group[1] != 'Discharged' %}
+                            <div class="flex items-center">
+                                <input type="checkbox" name="group_ids" value="{{ group[0] }}" id="group_{{ group[0] }}_{{ attendee[0] }}"
+                                       {% if group[0] in attendee_groups[attendee[0]]|map(attribute='0') %}checked{% endif %} class="mr-1">
+                                <label for="group_{{ group[0] }}_{{ attendee[0] }}" class="text-sm">{{ group[1] }}</label>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-white pt-2 flex justify-end z-10">
+                        <button type="button" onclick="closeModal('editAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                        <button type="submit" form="editAttendeeForm{{ attendee[0] }}" class="bg-blue-600 text-white p-1 rounded text-sm">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Delete Attendee Modal -->
+        <div id="deleteAttendeeModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-2">Delete Attendee</h2>
+                <p class="text-sm mb-2">Are you sure you want to delete "{{ attendee[1] }}" ({{ attendee[2] }})? This will remove all associated attendance records.</p>
+                <form method="POST" id="deleteAttendeeForm{{ attendee[0] }}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('deleteAttendeeModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                        <button type="submit" form="deleteAttendeeForm{{ attendee[0] }}" class="bg-red-600 text-white p-1 rounded text-sm">Delete</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Move to Discharged Modal -->
+        <div id="moveToDischargedModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-2">Move to Discharged</h2>
+                <p class="text-sm mb-2">Are you sure you want to move "{{ attendee[1] }}" to the Discharged group? This will remove them from all other groups.</p>
+                <form method="POST" id="moveToDischargedForm{{ attendee[0] }}">
+                    <input type="hidden" name="action" value="move_to_discharged">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('moveToDischargedModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                        <button type="submit" form="moveToDischargedForm{{ attendee[0] }}" class="bg-yellow-600 text-white p-1 rounded text-sm">Move</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Move from Discharged Modal -->
+        <div id="moveFromDischargedModal{{ attendee[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-2">Move to Active Groups</h2>
+                <p class="text-sm mb-2">Select groups to move "{{ attendee[1] }}" to:</p>
+                <form method="POST" id="moveFromDischargedForm{{ attendee[0] }}">
+                    <input type="hidden" name="action" value="move_from_discharged">
+                    <input type="hidden" name="attendee_id" value="{{ attendee[0] }}">
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">Groups</label>
+                        <div class="max-h-32 overflow-y-auto border rounded p-1">
+                            {% for group in groups %}
+                            {% if group[1] != 'Discharged' %}
+                            <div class="flex items-center">
+                                <input type="checkbox" name="group_ids" value="{{ group[0] }}" id="group_{{ group[0] }}_move_{{ attendee[0] }}" class="mr-1">
+                                <label for="group_{{ group[0] }}_move_{{ attendee[0] }}" class="text-sm">{{ group[1] }}</label>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-white pt-2 flex justify-end z-10">
+                        <button type="button" onclick="closeModal('moveFromDischargedModal{{ attendee[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                        <button type="submit" form="moveFromDischargedForm{{ attendee[0] }}" class="bg-green-600 text-white p-1 rounded text-sm">Move</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No attendees found.</p>
     {% endfor %}
 
     <!-- JavaScript for Modals -->

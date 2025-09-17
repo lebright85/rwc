@@ -1294,6 +1294,34 @@ def manage_attendees():
                 c.execute("DELETE FROM attendees WHERE id = %s", (attendee_id,))
                 conn.commit()
                 flash('Attendee deleted successfully')
+            elif action == 'move_to_discharged':
+                attendee_id = request.form['attendee_id']
+                c.execute("SELECT id FROM groups WHERE name = 'Discharged'")
+                discharged_id = c.fetchone()
+                if not discharged_id:
+                    flash('Discharged group not found', 'error')
+                else:
+                    c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s", (attendee_id,))
+                    c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (attendee_id, discharged_id[0]))
+                    conn.commit()
+                    flash('Attendee moved to Discharged group successfully')
+            elif action == 'move_from_discharged':
+                attendee_id = request.form['attendee_id']
+                group_ids = request.form.getlist('group_ids')
+                if not group_ids:
+                    flash('Please select at least one group to move the attendee to', 'error')
+                else:
+                    c.execute("SELECT id FROM groups WHERE name = 'Discharged'")
+                    discharged_id = c.fetchone()
+                    if discharged_id:
+                        c.execute("DELETE FROM attendee_groups WHERE attendee_id = %s AND group_id = %s",
+                                  (attendee_id, discharged_id[0]))
+                    for group_id in group_ids:
+                        c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                  (attendee_id, group_id))
+                    conn.commit()
+                    flash('Attendee moved back to active groups successfully')
         except psycopg2.IntegrityError:
             flash('Attendee ID already exists')
         except psycopg2.Error as e:

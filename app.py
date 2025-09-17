@@ -1023,13 +1023,43 @@ def counselor_manage_classes():
         action = request.form.get('action')
         logger.info(f"Received action in counselor_manage_classes: {action}")
         try:
-            if action == 'edit':
+            if action == 'add':
+                group_name = request.form['group_name']
+                class_name = request.form['class_name']
+                date = request.form['date']
+                group_hours = request.form['group_hours']
+                counselor_id = current_user.id  # Restrict to current counselor
+                group_type = request.form['group_type']
+                notes = request.form['notes']
+                location = request.form['location']
+                recurring = 1 if request.form.get('recurring') == 'on' else 0
+                frequency = request.form.get('frequency') if recurring else None
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
+                new_class_id = c.fetchone()[0]
+                conn.commit()
+                flash('Class added successfully')
+                if recurring and frequency == 'weekly':
+                    start = datetime.strptime(date, '%Y-%m-%d')
+                    max_date = (datetime.today() + timedelta(days=28)).strftime('%Y-%m-%d')
+                    current_date = start + timedelta(days=7)
+                    while current_date.strftime('%Y-%m-%d') <= max_date:
+                        new_date = current_date.strftime('%Y-%m-%d')
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND date = %s AND counselor_id = %s",
+                                  (class_name, new_date, counselor_id))
+                        if not c.fetchone():
+                            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
+                            new_instance_id = c.fetchone()[0]
+                        current_date += timedelta(days=7)
+                    conn.commit()
+            elif action == 'edit':
                 class_id = request.form['class_id']
                 group_name = request.form['group_name']
                 class_name = request.form['class_name']
                 date = request.form['date']
                 group_hours = request.form['group_hours']
-                counselor_id = request.form['counselor_id']
+                counselor_id = current_user.id  # Restrict to current counselor
                 group_type = request.form['group_type']
                 notes = request.form['notes']
                 location = request.form['location']
@@ -1217,6 +1247,7 @@ def counselor_manage_classes():
         params.extend([per_page, offset])
         c.execute(classes_query, params)
         classes = c.fetchall()
+        logger.info(f"Retrieved {len(classes)} classes for counselor_manage_classes: {[f'{c[2]} (recurring={c[9]})' for c in classes]}")
         c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")

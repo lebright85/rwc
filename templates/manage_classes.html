@@ -86,7 +86,7 @@
                 </div>
                 <div class="mb-2 flex items-center">
                     <input type="checkbox" name="recurring" id="recurring_add" class="mr-1">
-                    <label for="recurring_add" class="text-sm">Recurring</label>
+                    <label for="recurring_add" class="text-sm">Recurring Class</label>
                 </div>
                 <div class="mb-2">
                     <label class="block text-sm font-medium">Frequency</label>
@@ -190,7 +190,7 @@
                     </div>
                     <div class="mb-2 flex items-center">
                         <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] == 1 %}checked{% endif %} class="mr-1">
-                        <label for="recurring_{{ class[0] }}" class="text-sm">Recurring</label>
+                        <label for="recurring_{{ class[0] }}" class="text-sm">Recurring Class</label>
                     </div>
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Frequency</label>
@@ -199,8 +199,8 @@
                         </select>
                     </div>
                     <div class="mb-2 flex items-center">
-                        <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}" class="mr-1">
-                        <label for="propagate_{{ class[0] }}" class="text-sm">Propagate to future recurring classes</label>
+                        <input type="checkbox" name="propagate" id="propagate_{{ class[0] }}" class="mr-1" {% if class[9] != 1 %}disabled{% endif %}>
+                        <label for="propagate_{{ class[0] }}" class="text-sm">Apply changes to future recurring classes</label>
                     </div>
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Assigned Attendees</label>

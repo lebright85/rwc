@@ -261,13 +261,14 @@ def generate_recurring_classes():
             if not c.fetchone():
                 try:
                     c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                              (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
+                              (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 1, frequency))
                     new_class_id = c.fetchone()[0]
                     c.execute("SELECT attendee_id FROM class_attendees WHERE class_id = %s", (class_id,))
                     attendees = c.fetchall()
                     for attendee in attendees:
                         c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                                   (new_class_id, attendee[0]))
+                    logger.info(f"Generated recurring class {class_name} for {new_date} with recurring=1")
                 except psycopg2.Error as e:
                     logger.error(f"Error generating recurring class for {class_name} on {new_date}: {e}")
             current_date += delta
@@ -805,7 +806,7 @@ def manage_classes():
                                   (class_name, new_date, counselor_id))
                         if not c.fetchone():
                             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
+                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
                             new_instance_id = c.fetchone()[0]
                         current_date += timedelta(days=7)
                     conn.commit()
@@ -834,19 +835,19 @@ def manage_classes():
                 logger.info(f"Class {class_id} updated successfully")
                 flash('Class updated successfully')
                 if propagate and recurring:
-                    c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s",
+                    c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s AND recurring = 1",
                               (class_name, counselor_id, date))
                     future_ids = [row[0] for row in c.fetchall()]
                     for future_id in future_ids:
-                        c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s WHERE id = %s",
-                                  (group_name, class_name, group_hours, counselor_id, group_type, notes, location, future_id))
+                        c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s",
+                                  (group_name, class_name, group_hours, counselor_id, group_type, notes, location, recurring, frequency, future_id))
                         c.execute("DELETE FROM class_attendees WHERE class_id = %s", (future_id,))
                         for attendee_id in attendee_ids:
                             c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                                       (future_id, attendee_id))
                     conn.commit()
                     logger.info(f"Propagated changes to {len(future_ids)} future recurring classes")
-                    flash('Changes propagated to future recurring classes')
+                    flash(f'Propagated changes to {len(future_ids)} future recurring classes')
             elif action == 'delete' or action == 'delete_all_future':
                 class_id = request.form['class_id']
                 if action == 'delete_all_future':
@@ -854,11 +855,11 @@ def manage_classes():
                     class_info = c.fetchone()
                     if class_info:
                         class_name, counselor_id, current_date = class_info
-                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
                                   (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
                                   (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s",
+                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
                                   (class_name, counselor_id, current_date))
                         conn.commit()
                         logger.info(f"Deleted class {class_id} and all future recurring instances")
@@ -977,6 +978,7 @@ def manage_classes():
         params.extend([per_page, offset])
         c.execute(classes_query, params)
         classes = c.fetchall()
+        logger.info(f"Retrieved {len(classes)} classes for manage_classes: {[f'{c[2]} (recurring={c[9]})' for c in classes]}")
         c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")
@@ -1049,7 +1051,7 @@ def counselor_manage_classes():
                                   (class_name, new_date, counselor_id))
                         if not c.fetchone():
                             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 0, None))
+                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
                             new_instance_id = c.fetchone()[0]
                         current_date += timedelta(days=7)
                     conn.commit()
@@ -1088,19 +1090,19 @@ def counselor_manage_classes():
                         logger.info(f"Class {class_id} updated successfully by counselor {current_user.id}")
                         flash('Class updated successfully')
                         if propagate and recurring:
-                            c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s",
+                            c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s AND recurring = 1",
                                       (class_name, counselor_id, date))
                             future_ids = [row[0] for row in c.fetchall()]
                             for future_id in future_ids:
-                                c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s WHERE id = %s",
-                                          (group_name, class_name, group_hours, counselor_id, group_type, notes, location, future_id))
+                                c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s",
+                                          (group_name, class_name, group_hours, counselor_id, group_type, notes, location, recurring, frequency, future_id))
                                 c.execute("DELETE FROM class_attendees WHERE class_id = %s", (future_id,))
                                 for attendee_id in attendee_ids:
                                     c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                                               (future_id, attendee_id))
                             conn.commit()
                             logger.info(f"Propagated changes to {len(future_ids)} future recurring classes")
-                            flash('Changes propagated to future recurring classes')
+                            flash(f'Propagated changes to {len(future_ids)} future recurring classes')
             elif action == 'delete' or action == 'delete_all_future':
                 class_id = request.form['class_id']
                 c.execute("SELECT locked, class_name, counselor_id, date FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
@@ -1112,11 +1114,11 @@ def counselor_manage_classes():
                 else:
                     if action == 'delete_all_future':
                         class_name, counselor_id, current_date = class_info[1], class_info[2], class_info[3]
-                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
                                   (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s)",
+                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
                                   (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s",
+                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
                                   (class_name, counselor_id, current_date))
                         conn.commit()
                         logger.info(f"Deleted class {class_id} and all future recurring instances by counselor {current_user.id}")

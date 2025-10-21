@@ -771,6 +771,7 @@ def manage_classes():
     # Sorting and filtering parameters
     sort_by = request.args.get('sort_by', 'date')
     group_filter = request.args.get('group_filter', 'all')
+    counselor_filter = request.args.get('counselor_filter', 'all')
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
     page = int(request.args.get('page', 1))
@@ -940,6 +941,9 @@ def manage_classes():
         if group_filter != 'all':
             count_query += " AND c.group_name = %s"
             count_params.append(group_filter)
+        if counselor_filter != 'all':
+            count_query += " AND c.counselor_id = %s"
+            count_params.append(int(counselor_filter))
         if start_date:
             count_query += " AND c.date >= %s"
             count_params.append(start_date)
@@ -964,6 +968,9 @@ def manage_classes():
         if group_filter != 'all':
             classes_query += " AND c.group_name = %s"
             params.append(group_filter)
+        if counselor_filter != 'all':
+            classes_query += " AND c.counselor_id = %s"
+            params.append(int(counselor_filter))
         if start_date:
             classes_query += " AND c.date >= %s"
             params.append(start_date)
@@ -1000,11 +1007,11 @@ def manage_classes():
         logger.error(f"Database error in manage_classes data fetch: {e}")
         flash('Error loading classes. Please try again.', 'error')
         conn.close()
-        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
+        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     finally:
         conn.close()
 
-    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
+    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
 
 @app.route('/counselor_manage_classes', methods=['GET', 'POST'])
 @login_required

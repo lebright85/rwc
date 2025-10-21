@@ -39,63 +39,6 @@
         </form>
     </div>
 
-    <!-- Add Class Button -->
-    <div class="mb-6">
-        <button onclick="openModal('addClassModal')" class="bg-blue-600 text-white p-2 rounded text-sm">Add Class</button>
-    </div>
-
-    <!-- Add Class Modal -->
-    <div id="addClassModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
-            <h2 class="text-lg font-bold mb-2">Add Class</h2>
-            <form method="POST" id="addClassForm">
-                <input type="hidden" name="action" value="add">
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Group Name</label>
-                    <input type="text" name="group_name" class="w-full border rounded p-1 text-sm" required>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Class Name</label>
-                    <input type="text" name="class_name" class="w-full border rounded p-1 text-sm" required>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Date</label>
-                    <input type="date" name="date" class="w-full border rounded p-1 text-sm" required>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Group Hours</label>
-                    <input type="text" name="group_hours" class="w-full border rounded p-1 text-sm" required>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Group Type</label>
-                    <input type="text" name="group_type" class="w-full border rounded p-1 text-sm">
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Notes</label>
-                    <textarea name="notes" class="w-full border rounded p-1 text-sm h-16"></textarea>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Location</label>
-                    <input type="text" name="location" class="w-full border rounded p-1 text-sm">
-                </div>
-                <div class="mb-2 flex items-center">
-                    <input type="checkbox" name="recurring" id="recurring_add" class="mr-1">
-                    <label for="recurring_add" class="text-sm">Recurring Class</label>
-                </div>
-                <div class="mb-2">
-                    <label class="block text-sm font-medium">Frequency</label>
-                    <select name="frequency" class="w-full border rounded p-1 text-sm">
-                        <option value="weekly">Weekly</option>
-                    </select>
-                </div>
-                <div class="sticky bottom-0 bg-white pt-2 flex justify-end z-10">
-                    <button type="button" onclick="closeModal('addClassModal')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
-                    <button type="submit" form="addClassForm" class="bg-blue-600 text-white p-1 rounded text-sm">Add</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Classes List -->
     {% if not classes %}
     <p class="text-sm text-gray-500">No classes found. {% if group_filter != 'all' or start_date or end_date %}Try adjusting your filters.{% endif %}</p>

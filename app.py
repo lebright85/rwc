@@ -768,7 +768,6 @@ def manage_classes():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    # Sorting and filtering parameters
     sort_by = request.args.get('sort_by', 'date')
     group_filter = request.args.get('group_filter', 'all')
     counselor_filter = request.args.get('counselor_filter', 'all')
@@ -787,9 +786,9 @@ def manage_classes():
                 date = request.form['date']
                 group_hours = request.form['group_hours']
                 counselor_id = request.form['counselor_id']
-                group_type = request.form['group_type']
-                notes = request.form['notes']
-                location = request.form['location']
+                group_type = request.form.get('group_type')
+                notes = request.form.get('notes')
+                location = request.form.get('location')
                 recurring = 1 if request.form.get('recurring') == 'on' else 0
                 frequency = request.form.get('frequency') if recurring else None
                 c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
@@ -809,6 +808,7 @@ def manage_classes():
                             c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                                       (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
                             new_instance_id = c.fetchone()[0]
+                            logger.info(f"Generated recurring class {class_name} for {new_date} with id {new_instance_id}")
                         current_date += timedelta(days=7)
                     conn.commit()
             elif action == 'edit':
@@ -818,9 +818,9 @@ def manage_classes():
                 date = request.form['date']
                 group_hours = request.form['group_hours']
                 counselor_id = request.form['counselor_id']
-                group_type = request.form['group_type']
-                notes = request.form['notes']
-                location = request.form['location']
+                group_type = request.form.get('group_type')
+                notes = request.form.get('notes')
+                location = request.form.get('location')
                 recurring = 1 if request.form.get('recurring') == 'on' else 0
                 frequency = request.form.get('frequency') if recurring else None
                 propagate = request.form.get('propagate', 'off') == 'on'
@@ -851,29 +851,37 @@ def manage_classes():
                     flash(f'Propagated changes to {len(future_ids)} future recurring classes')
             elif action == 'delete' or action == 'delete_all_future':
                 class_id = request.form['class_id']
-                if action == 'delete_all_future':
-                    c.execute("SELECT class_name, counselor_id, date FROM classes WHERE id = %s", (class_id,))
-                    class_info = c.fetchone()
-                    if class_info:
-                        class_name, counselor_id, current_date = class_info
-                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
-                                  (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
-                                  (class_name, counselor_id, current_date))
-                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
-                                  (class_name, counselor_id, current_date))
-                        conn.commit()
-                        logger.info(f"Deleted class {class_id} and all future recurring instances")
-                        flash('Class and all future recurring instances deleted successfully')
-                    else:
-                        flash('Class not found', 'error')
+                c.execute("SELECT class_name, counselor_id, date, recurring FROM classes WHERE id = %s", (class_id,))
+                class_info = c.fetchone()
+                if not class_info:
+                    logger.error(f"Class {class_id} not found for deletion")
+                    flash('Class not found', 'error')
                 else:
-                    c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
-                    c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-                    c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
-                    conn.commit()
-                    logger.info(f"Class {class_id} deleted successfully")
-                    flash('Class deleted successfully')
+                    class_name, counselor_id, current_date, recurring = class_info
+                    if action == 'delete_all_future' and recurring == 1:
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
+                                  (class_name, counselor_id, current_date))
+                        deleted_ids = [row[0] for row in c.fetchall()]
+                        if deleted_ids:
+                            c.execute("DELETE FROM class_attendees WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM attendance WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM classes WHERE id IN %s",
+                                      (tuple(deleted_ids),))
+                            conn.commit()
+                            logger.info(f"Deleted {len(deleted_ids)} recurring classes (ids: {deleted_ids}) for {class_name} starting from {current_date}")
+                            flash(f'Deleted {len(deleted_ids)} recurring classes and their associated data')
+                        else:
+                            logger.warning(f"No future recurring classes found for {class_name} with counselor_id {counselor_id} on or after {current_date}")
+                            flash('No future recurring classes found to delete', 'info')
+                    else:
+                        c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
+                        conn.commit()
+                        logger.info(f"Deleted single class {class_id}")
+                        flash('Class deleted successfully')
             elif action == 'assign_attendee':
                 class_id = request.form['class_id']
                 attendee_id = request.form['attendee_id']
@@ -896,23 +904,16 @@ def manage_classes():
                 attendee_ids = [row[0] for row in c.fetchall()]
                 if not attendee_ids:
                     logger.warning(f"No attendees found in group {group_id} for class {class_id}")
-                    flash(f'No attendees found in group', 'error')
+                    flash('No attendees found in group', 'error')
                 else:
                     assigned_count = 0
                     for attendee_id in attendee_ids:
-                        try:
-                            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                                      (class_id, attendee_id))
-                            assigned_count += c.rowcount
-                        except psycopg2.Error as e:
-                            logger.error(f"Error assigning attendee {attendee_id} to class {class_id}: {e}")
+                        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                  (class_id, attendee_id))
+                        assigned_count += c.rowcount
                     conn.commit()
-                    if assigned_count > 0:
-                        logger.info(f"Assigned {assigned_count} attendees from group {group_id} to class {class_id}")
-                        flash(f'Assigned {assigned_count} attendees from group to class', 'success')
-                    else:
-                        logger.info(f"No new attendees assigned from group {group_id} to class {class_id}")
-                        flash(f'No new attendees assigned from group (already assigned or no attendees)', 'info')
+                    logger.info(f"Assigned {assigned_count} attendees from group {group_id} to class {class_id}")
+                    flash(f'Assigned {assigned_count} attendees from group to class')
             elif action == 'toggle_lock':
                 class_id = request.form['class_id']
                 locked = request.form['locked'] == 'true'
@@ -923,8 +924,10 @@ def manage_classes():
             else:
                 logger.warning(f"Unknown action received: {action}")
                 flash('Invalid action', 'error')
-        except psycopg2.IntegrityError:
-            flash('Action failed due to duplicate or invalid data')
+        except psycopg2.IntegrityError as e:
+            logger.error(f"Integrity error in manage_classes: {e}")
+            flash('Action failed due to duplicate or invalid data', 'error')
+            conn.rollback()
         except psycopg2.Error as e:
             logger.error(f"Database error in manage_classes: {e}")
             flash('Error processing your request. Please try again.', 'error')
@@ -935,7 +938,6 @@ def manage_classes():
             conn.rollback()
 
     try:
-        # Count total classes for pagination
         count_query = "SELECT COUNT(*) FROM classes c WHERE 1=1"
         count_params = []
         if group_filter != 'all':
@@ -953,7 +955,7 @@ def manage_classes():
         c.execute(count_query, count_params)
         total_classes = c.fetchone()[0]
         total_pages = math.ceil(total_classes / per_page)
-        page = max(1, min(page, total_pages))  # Ensure page is within bounds
+        page = max(1, min(page, total_pages))
         offset = (page - 1) * per_page
 
         c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
@@ -986,6 +988,7 @@ def manage_classes():
         c.execute(classes_query, params)
         classes = c.fetchall()
         logger.info(f"Retrieved {len(classes)} classes for manage_classes: {[f'{c[2]} (recurring={c[9]})' for c in classes]}")
+
         c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")
@@ -1003,9 +1006,15 @@ def manage_classes():
                 ORDER BY a.full_name ASC
             """, (class_[0],))
             class_attendees[class_[0]] = c.fetchall()
+
     except psycopg2.Error as e:
         logger.error(f"Database error in manage_classes data fetch: {e}")
         flash('Error loading classes. Please try again.', 'error')
+        conn.close()
+        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
+    except Exception as e:
+        logger.error(f"Unexpected error in manage_classes data fetch: {e}")
+        flash('An unexpected error occurred. Please try again.', 'error')
         conn.close()
         return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     finally:

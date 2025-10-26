@@ -1,20 +1,13 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-7xl mx-auto px-4">
+<div class="max-w-4xl mx-auto">
     <h1 class="text-2xl font-bold mb-6">Manage Classes</h1>
-
-    <!-- View Toggle -->
-    <div class="mb-4 flex justify-end">
-        <button onclick="window.location.href='{{ url_for('manage_classes', view_type='list', group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, sort_by=sort_by, page=page) }}'" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm {% if view_type == 'list' %}bg-blue-800{% endif %}">List View</button>
-        <button onclick="window.location.href='{{ url_for('manage_classes', view_type='grid', group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date) }}'" class="bg-blue-600 text-white p-2 rounded text-sm {% if view_type == 'grid' %}bg-blue-800{% endif %}">Grid View</button>
-    </div>
 
     <!-- Filter Form -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 class="text-lg font-bold mb-4">Filter Classes</h2>
         <form method="GET" id="filterClassesForm">
-            <input type="hidden" name="view_type" value="{{ view_type }}">
-            <div class="grid grid-cols-1 md:grid-cols-{% if view_type == 'grid' %}4{% else %}5{% endif %} gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-sm font-medium">Group</label>
                     <select name="group_filter" class="w-full border rounded p-2 text-sm">
@@ -34,10 +27,9 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium">{% if view_type == 'grid' %}Week Starting{% else %}Start Date{% endif %}</label>
+                    <label class="block text-sm font-medium">Start Date</label>
                     <input type="date" name="start_date" value="{{ start_date }}" class="w-full border rounded p-2 text-sm">
                 </div>
-                {% if view_type == 'list' %}
                 <div>
                     <label class="block text-sm font-medium">End Date</label>
                     <input type="date" name="end_date" value="{{ end_date }}" class="w-full border rounded p-2 text-sm">
@@ -45,11 +37,10 @@
                 <div>
                     <label class="block text-sm font-medium">Sort By</label>
                     <select name="sort_by" class="w-full border rounded p-2 text-sm">
-                        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date (Earliest to Latest)</option>
+                        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
                         <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group</option>
                     </select>
                 </div>
-                {% endif %}
             </div>
             <div class="mt-4 flex justify-end">
                 <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Filter</button>
@@ -57,77 +48,6 @@
         </form>
     </div>
 
-    <!-- Grid View -->
-    {% if view_type == 'grid' %}
-    <div class="mb-6">
-        <h2 class="text-lg font-bold mb-4">Weekly Schedule ({{ start_date }} to {{ end_date }})</h2>
-        <div class="overflow-x-auto">
-            <table class="w-full border-collapse text-sm">
-                <thead>
-                    <tr class="bg-gray-100">
-                        <th class="border p-2 text-left">Time</th>
-                        <th class="border p-2 text-left">Monday</th>
-                        <th class="border p-2 text-left">Tuesday</th>
-                        <th class="border p-2 text-left">Wednesday</th>
-                        <th class="border p-2 text-left">Thursday</th>
-                        <th class="border p-2 text-left">Friday</th>
-                        <th class="border p-2 text-left">Notes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for slot in time_slots %}
-                    <tr>
-                        <td class="border p-2 font-medium">{{ slot }}</td>
-                        {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
-                        <td class="border p-2">
-                            {% for class in grid_data[day][slot] %}
-                            <div class="mb-2">
-                                <span class="font-bold">{{ class.class_name }}</span><br>
-                                Counselor: {{ class.counselor }}<br>
-                                {% if class.recurring == 1 %}
-                                (Recurring: {{ class.frequency or 'weekly' }})
-                                {% else %}
-                                (Non-recurring)
-                                {% endif %}
-                                {% if class.locked %} (Locked) {% endif %}
-                                <div class="mt-1">
-                                    <button onclick="openModal('editClassModal{{ class.id }}')" class="bg-blue-600 text-white p-1 rounded text-xs">Edit</button>
-                                    <button onclick="openModal('deleteClassModal{{ class.id }}')" class="bg-red-600 text-white p-1 rounded text-xs">Delete</button>
-                                    <button onclick="openModal('assignAttendeeModal{{ class.id }}')" class="bg-green-600 text-white p-1 rounded text-xs">Assign Attendee</button>
-                                    <button onclick="openModal('assignGroupModal{{ class.id }}')" class="bg-green-600 text-white p-1 rounded text-xs">Assign Group</button>
-                                    <form method="POST" id="lockForm{{ class.id }}" class="inline">
-                                        <input type="hidden" name="action" value="toggle_lock">
-                                        <input type="hidden" name="class_id" value="{{ class.id }}">
-                                        <input type="hidden" name="locked" value="{{ 'true' if not class.locked else 'false' }}">
-                                        <button type="submit" form="lockForm{{ class.id }}" class="bg-yellow-600 text-white p-1 rounded text-xs">{{ 'Lock' if not class.locked else 'Unlock' }}</button>
-                                    </form>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </td>
-                        {% endfor %}
-                        <td class="border p-2">
-                            {% for class in grid_data['Monday'][slot] + grid_data['Tuesday'][slot] + grid_data['Wednesday'][slot] + grid_data['Thursday'][slot] + grid_data['Friday'][slot] %}
-                            {% if class.notes %}
-                            <div class="mb-2">{{ class.class_name }}: {{ class.notes }}</div>
-                            {% endif %}
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <!-- Week Navigation -->
-        <div class="mt-4 flex justify-center space-x-4">
-            <a href="{{ url_for('manage_classes', view_type='grid', group_filter=group_filter, counselor_filter=counselor_filter, start_date=(start_date|to_date - timedelta(days=7)).strftime('%Y-%m-%d')) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous Week</a>
-            <a href="{{ url_for('manage_classes', view_type='grid', group_filter=group_filter, counselor_filter=counselor_filter, start_date=(start_date|to_date + timedelta(days=7)).strftime('%Y-%m-%d')) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next Week</a>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- List View -->
-    {% if view_type == 'list' %}
     <!-- Add Class Modal -->
     <div class="mb-6">
         <button onclick="openModal('addClassModal')" class="bg-blue-600 text-white p-2 rounded text-sm">Add Class</button>
@@ -388,16 +308,15 @@
     <!-- Pagination Controls -->
     <div class="mt-6 flex justify-center items-center space-x-2">
         {% if page > 1 %}
-        <a href="{{ url_for('manage_classes', page=page-1, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, view_type='list') }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
+        <a href="{{ url_for('manage_classes', page=page-1, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
         {% endif %}
         {% for p in range(1, total_pages + 1) %}
-        <a href="{{ url_for('manage_classes', page=p, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, view_type='list') }}" class="p-2 rounded text-sm {% if p == page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
+        <a href="{{ url_for('manage_classes', page=p, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date) }}" class="p-2 rounded text-sm {% if p == page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
         {% endfor %}
         {% if page < total_pages %}
-        <a href="{{ url_for('manage_classes', page=page+1, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, view_type='list') }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
+        <a href="{{ url_for('manage_classes', page=page+1, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
         {% endif %}
     </div>
-    {% endif %}
 
     <!-- JavaScript for Modals -->
     <script>
@@ -408,8 +327,5 @@
             document.getElementById(modalId).classList.add('hidden');
         }
     </script>
-
-    <!-- Jinja2 Filter for Date Arithmetic -->
-    {% set to_date = lambda date_str: datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.today() %}
 </div>
 {% endblock %}

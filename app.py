@@ -768,26 +768,13 @@ def manage_classes():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    view_type = request.args.get('view_type', 'list')
-    sort_by = request.args.get('sort_by', 'date') if view_type == 'list' else 'date'
+    sort_by = request.args.get('sort_by', 'date')
     group_filter = request.args.get('group_filter', 'all')
     counselor_filter = request.args.get('counselor_filter', 'all')
     start_date = request.args.get('start_date', '')
-    end_date = request.args.get('end_date', '') if view_type == 'list' else ''
-    page = int(request.args.get('page', 1)) if view_type == 'list' else 1
-    per_page = 10 if view_type == 'list' else 100
-
-    if view_type == 'grid':
-        if start_date:
-            try:
-                selected_date = datetime.strptime(start_date, '%Y-%m-%d')
-            except ValueError:
-                selected_date = datetime.today()
-        else:
-            selected_date = datetime.today()
-        monday = selected_date - timedelta(days=selected_date.weekday())
-        start_date = monday.strftime('%Y-%m-%d')
-        end_date = (monday + timedelta(days=6)).strftime('%Y-%m-%d')
+    end_date = request.args.get('end_date', '')
+    page = int(request.args.get('page', 1))
+    per_page = 10
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -951,160 +938,89 @@ def manage_classes():
             conn.rollback()
 
     try:
+        count_query = "SELECT COUNT(*) FROM classes c WHERE 1=1"
+        count_params = []
+        if group_filter != 'all':
+            count_query += " AND c.group_name = %s"
+            count_params.append(group_filter)
+        if counselor_filter != 'all':
+            count_query += " AND c.counselor_id = %s"
+            count_params.append(int(counselor_filter))
+        if start_date:
+            count_query += " AND c.date >= %s"
+            count_params.append(start_date)
+        if end_date:
+            count_query += " AND c.date <= %s"
+            count_params.append(end_date)
+        c.execute(count_query, count_params)
+        total_classes = c.fetchone()[0]
+        total_pages = math.ceil(total_classes / per_page)
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+
         c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
         counselors = c.fetchall()
-
-        time_slots = ['9-10 AM', '1-2 PM']
-
-        if view_type == 'grid':
-            classes_query = """
-                SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
-                FROM classes c
-                LEFT JOIN users u ON c.counselor_id = u.id
-                WHERE c.date BETWEEN %s AND %s
-            """
-            params = [start_date, end_date]
-            if group_filter != 'all':
-                classes_query += " AND c.group_name = %s"
-                params.append(group_filter)
-            if counselor_filter != 'all':
-                classes_query += " AND c.counselor_id = %s"
-                params.append(int(counselor_filter))
-            classes_query += " ORDER BY c.date ASC, c.group_hours ASC"
-            c.execute(classes_query, params)
-            classes = c.fetchall()
-            logger.info(f"Retrieved {len(classes)} classes for grid view: {[f'{c[2]} on {c[3]}' for c in classes]}")
-
-            grid_data = {
-                'Monday': {slot: [] for slot in time_slots},
-                'Tuesday': {slot: [] for slot in time_slots},
-                'Wednesday': {slot: [] for slot in time_slots},
-                'Thursday': {slot: [] for slot in time_slots},
-                'Friday': {slot: [] for slot in time_slots},
-            }
-            for class_ in classes:
-                class_date = datetime.strptime(class_[3], '%Y-%m-%d')
-                day_name = class_date.strftime('%A')
-                if day_name not in grid_data:
-                    continue
-                group_hours = class_[4].strip().upper() if class_[4] else ''
-                time_slot = None
-                for slot in time_slots:
-                    if slot in group_hours or group_hours in slot:
-                        time_slot = slot
-                        break
-                if not time_slot:
-                    continue
-                grid_data[day_name][time_slot].append({
-                    'id': class_[0],
-                    'class_name': class_[2],
-                    'counselor': class_[11],
-                    'notes': class_[7] or '',
-                    'recurring': class_[9],
-                    'frequency': class_[10],
-                    'locked': class_[12]
-                })
-
-            c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
-            attendees = c.fetchall()
-            c.execute("SELECT id, name FROM groups ORDER BY name")
-            groups = c.fetchall()
-            class_attendees = {}
-            for class_ in classes:
-                c.execute("""
-                    SELECT a.id, a.full_name, a.attendee_id, string_agg(g.name, ', ') AS groups
-                    FROM attendees a
-                    JOIN class_attendees ca ON a.id = ca.attendee_id
-                    LEFT JOIN attendee_groups ag ON a.id = ag.attendee_id
-                    LEFT JOIN groups g ON ag.group_id = g.id
-                    WHERE ca.class_id = %s
-                    GROUP BY a.id
-                    ORDER BY a.full_name ASC
-                """, (class_[0],))
-                class_attendees[class_[0]] = c.fetchall()
-
+        classes_query = """
+            SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
+            FROM classes c
+            LEFT JOIN users u ON c.counselor_id = u.id
+            WHERE 1=1
+        """
+        params = []
+        if group_filter != 'all':
+            classes_query += " AND c.group_name = %s"
+            params.append(group_filter)
+        if counselor_filter != 'all':
+            classes_query += " AND c.counselor_id = %s"
+            params.append(int(counselor_filter))
+        if start_date:
+            classes_query += " AND c.date >= %s"
+            params.append(start_date)
+        if end_date:
+            classes_query += " AND c.date <= %s"
+            params.append(end_date)
+        if sort_by == 'group':
+            classes_query += " ORDER BY c.group_name ASC, c.date ASC"
         else:
-            count_query = "SELECT COUNT(*) FROM classes c WHERE 1=1"
-            count_params = []
-            if group_filter != 'all':
-                count_query += " AND c.group_name = %s"
-                count_params.append(group_filter)
-            if counselor_filter != 'all':
-                count_query += " AND c.counselor_id = %s"
-                count_params.append(int(counselor_filter))
-            if start_date:
-                count_query += " AND c.date >= %s"
-                count_params.append(start_date)
-            if end_date:
-                count_query += " AND c.date <= %s"
-                count_params.append(end_date)
-            c.execute(count_query, count_params)
-            total_classes = c.fetchone()[0]
-            total_pages = math.ceil(total_classes / per_page)
-            page = max(1, min(page, total_pages))
-            offset = (page - 1) * per_page
+            classes_query += " ORDER BY c.date ASC"
+        classes_query += " LIMIT %s OFFSET %s"
+        params.extend([per_page, offset])
+        c.execute(classes_query, params)
+        classes = c.fetchall()
+        logger.info(f"Retrieved {len(classes)} classes for manage_classes: {[f'{c[2]} (recurring={c[9]})' for c in classes]}")
 
-            classes_query = """
-                SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
-                FROM classes c
-                LEFT JOIN users u ON c.counselor_id = u.id
-                WHERE 1=1
-            """
-            params = []
-            if group_filter != 'all':
-                classes_query += " AND c.group_name = %s"
-                params.append(group_filter)
-            if counselor_filter != 'all':
-                classes_query += " AND c.counselor_id = %s"
-                params.append(int(counselor_filter))
-            if start_date:
-                classes_query += " AND c.date >= %s"
-                params.append(start_date)
-            if end_date:
-                classes_query += " AND c.date <= %s"
-                params.append(end_date)
-            if sort_by == 'group':
-                classes_query += " ORDER BY c.group_name ASC, c.date ASC"
-            else:
-                classes_query += " ORDER BY c.date ASC"
-            classes_query += " LIMIT %s OFFSET %s"
-            params.extend([per_page, offset])
-            c.execute(classes_query, params)
-            classes = c.fetchall()
-            logger.info(f"Retrieved {len(classes)} classes for list view: {[f'{c[2]} (recurring={c[9]})' for c in classes]}")
-
-            c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
-            attendees = c.fetchall()
-            c.execute("SELECT id, name FROM groups ORDER BY name")
-            groups = c.fetchall()
-            class_attendees = {}
-            for class_ in classes:
-                c.execute("""
-                    SELECT a.id, a.full_name, a.attendee_id, string_agg(g.name, ', ') AS groups
-                    FROM attendees a
-                    JOIN class_attendees ca ON a.id = ca.attendee_id
-                    LEFT JOIN attendee_groups ag ON a.id = ag.attendee_id
-                    LEFT JOIN groups g ON ag.group_id = g.id
-                    WHERE ca.class_id = %s
-                    GROUP BY a.id
-                    ORDER BY a.full_name ASC
-                """, (class_[0],))
-                class_attendees[class_[0]] = c.fetchall()
+        c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
+        attendees = c.fetchall()
+        c.execute("SELECT id, name FROM groups ORDER BY name")
+        groups = c.fetchall()
+        class_attendees = {}
+        for class_ in classes:
+            c.execute("""
+                SELECT a.id, a.full_name, a.attendee_id, string_agg(g.name, ', ') AS groups
+                FROM attendees a
+                JOIN class_attendees ca ON a.id = ca.attendee_id
+                LEFT JOIN attendee_groups ag ON a.id = ag.attendee_id
+                LEFT JOIN groups g ON ag.group_id = g.id
+                WHERE ca.class_id = %s
+                GROUP BY a.id
+                ORDER BY a.full_name ASC
+            """, (class_[0],))
+            class_attendees[class_[0]] = c.fetchall()
 
     except psycopg2.Error as e:
         logger.error(f"Database error in manage_classes data fetch: {e}")
         flash('Error loading classes. Please try again.', 'error')
         conn.close()
-        return render_template('manage_classes.html', counselors=[], classes=[], grid_data={}, time_slots=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1, view_type=view_type)
+        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     except Exception as e:
         logger.error(f"Unexpected error in manage_classes data fetch: {e}")
         flash('An unexpected error occurred. Please try again.', 'error')
         conn.close()
-        return render_template('manage_classes.html', counselors=[], classes=[], grid_data={}, time_slots=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1, view_type=view_type)
+        return render_template('manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     finally:
         conn.close()
 
-    return render_template('manage_classes.html', counselors=counselors, classes=classes, grid_data=grid_data if view_type == 'grid' else {}, time_slots=time_slots, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages if view_type == 'list' else 1, view_type=view_type)
+    return render_template('manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
 
 @app.route('/counselor_manage_classes', methods=['GET', 'POST'])
 @login_required

@@ -1037,7 +1037,6 @@ def counselor_manage_classes():
     per_page = 10
 
     try:
-        # Handle POST actions (edit, delete, assign, unassign)
         if request.method == 'POST':
             action = request.form.get('action')
             logger.info(f"Received action in counselor_manage_classes: {action}")
@@ -1079,29 +1078,37 @@ def counselor_manage_classes():
                 flash('Class updated successfully')
             elif action == 'delete' or action == 'delete_all_future':
                 class_id = request.form['class_id']
-                if action == 'delete_all_future':
-                    c.execute("SELECT class_name, date FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
-                    class_info = c.fetchone()
-                    if class_info:
-                        class_name, current_date = class_info
-                        c.execute("DELETE FROM class_attendees WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
-                                  (class_name, current_user.id, current_date))
-                        c.execute("DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1)",
-                                  (class_name, current_user.id, current_date))
-                        c.execute("DELETE FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
-                                  (class_name, current_user.id, current_date))
-                        conn.commit()
-                        logger.info(f"Deleted class {class_id} and all future recurring instances")
-                        flash('Class and all future recurring instances deleted successfully')
-                    else:
-                        flash('Class not found', 'error')
+                c.execute("SELECT class_name, date, recurring FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    logger.error(f"Class {class_id} not found for counselor {current_user.id}")
+                    flash('Class not found', 'error')
                 else:
-                    c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
-                    c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-                    c.execute("DELETE FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
-                    conn.commit()
-                    logger.info(f"Class {class_id} deleted successfully")
-                    flash('Class deleted successfully')
+                    class_name, current_date, recurring = class_info
+                    if action == 'delete_all_future' and recurring == 1:
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
+                                  (class_name, current_user.id, current_date))
+                        deleted_ids = [row[0] for row in c.fetchall()]
+                        if deleted_ids:
+                            c.execute("DELETE FROM class_attendees WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM attendance WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM classes WHERE id IN %s",
+                                      (tuple(deleted_ids),))
+                            conn.commit()
+                            logger.info(f"Deleted {len(deleted_ids)} recurring classes (ids: {deleted_ids}) for {class_name}")
+                            flash(f'Deleted {len(deleted_ids)} recurring classes')
+                        else:
+                            logger.warning(f"No future recurring classes found for {class_name} with counselor_id {current_user.id}")
+                            flash('No future recurring classes found to delete', 'info')
+                    else:
+                        c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                        conn.commit()
+                        logger.info(f"Deleted single class {class_id}")
+                        flash('Class deleted successfully')
             elif action == 'assign_attendee':
                 class_id = request.form['class_id']
                 attendee_id = request.form['attendee_id']
@@ -1134,11 +1141,40 @@ def counselor_manage_classes():
                     conn.commit()
                     logger.info(f"Assigned {assigned_count} attendees from group {group_id} to class {class_id}")
                     flash(f'Assigned {assigned_count} attendees from group to class')
+            elif action == 'reassign_counselor':
+                class_id = request.form['class_id']
+                new_counselor_id = request.form['new_counselor_id']
+                propagate = request.form.get('propagate', 'off') == 'on'
+                c.execute("SELECT class_name, date, recurring FROM classes WHERE id = %s AND counselor_id = %s", (class_id, current_user.id))
+                class_info = c.fetchone()
+                if not class_info:
+                    logger.error(f"Class {class_id} not found for counselor {current_user.id}")
+                    flash('Class not found', 'error')
+                else:
+                    class_name, date, recurring = class_info
+                    c.execute("UPDATE classes SET counselor_id = %s WHERE id = %s AND counselor_id = %s",
+                              (new_counselor_id, class_id, current_user.id))
+                    conn.commit()
+                    logger.info(f"Class {class_id} reassigned to counselor {new_counselor_id}")
+                    if propagate and recurring:
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s AND recurring = 1",
+                                  (class_name, current_user.id, date))
+                        future_ids = [row[0] for row in c.fetchall()]
+                        if future_ids:
+                            c.execute("UPDATE classes SET counselor_id = %s WHERE id IN %s",
+                                      (new_counselor_id, tuple(future_ids)))
+                            conn.commit()
+                            logger.info(f"Propagated reassignment to {len(future_ids)} future recurring classes (ids: {future_ids})")
+                            flash(f'Reassigned class and {len(future_ids)} future recurring classes to new counselor')
+                        else:
+                            logger.warning(f"No future recurring classes found for {class_name} with counselor_id {current_user.id}")
+                            flash('No future recurring classes found to reassign', 'info')
+                    else:
+                        flash('Class reassigned successfully')
             else:
                 logger.warning(f"Unknown action received: {action}")
                 flash('Invalid action', 'error')
 
-        # Fetch data for rendering
         count_query = "SELECT COUNT(*) FROM classes c WHERE c.counselor_id = %s"
         count_params = [current_user.id]
         if group_filter != 'all':
@@ -1156,6 +1192,8 @@ def counselor_manage_classes():
         page = max(1, min(page, total_pages))
         offset = (page - 1) * per_page
 
+        c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor' AND id != %s", (current_user.id,))
+        counselors = c.fetchall()
         classes_query = """
             SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
             FROM classes c
@@ -1186,7 +1224,6 @@ def counselor_manage_classes():
         attendees = c.fetchall()
         c.execute("SELECT id, name FROM groups ORDER BY name")
         groups = c.fetchall()
-
         class_attendees = {}
         for class_ in classes:
             c.execute("""
@@ -1205,16 +1242,16 @@ def counselor_manage_classes():
         logger.error(f"Database error in counselor_manage_classes: {e}")
         flash('Error loading classes. Please try again.', 'error')
         conn.close()
-        return render_template('counselor_manage_classes.html', classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
+        return render_template('counselor_manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     except Exception as e:
         logger.error(f"Unexpected error in counselor_manage_classes: {e}")
         flash('An unexpected error occurred. Please try again.', 'error')
         conn.close()
-        return render_template('counselor_manage_classes.html', classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
+        return render_template('counselor_manage_classes.html', counselors=[], classes=[], attendees=[], class_attendees={}, groups=[], sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=1, total_pages=1)
     finally:
         conn.close()
 
-    return render_template('counselor_manage_classes.html', classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
+    return render_template('counselor_manage_classes.html', counselors=counselors, classes=classes, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages)
 
 @app.route('/manage_attendees', methods=['GET', 'POST'])
 @login_required

@@ -203,7 +203,7 @@
             {% if class[9] == 1 %} (Recurring: {{ class[10] or 'weekly' }}) {% else %} (Non-recurring) {% endif %}
         </h3>
         <p>Counselor: {{ class[11] }}</p>
-        <p>Type: {{ class[6] or 'N/A' }} | Notes: {{ class[7] or 'N/A' }} | Recurring: {{ 'Yes' if class[9] == 1 else 'No' }} | Frequency: {{ class[10] or 'N/A' }}</p>
+        <p>Type: {{ class[6] }} | Notes: {{ class[7] }} | Recurring: {{ 'Yes' if class[9] == 1 else 'No' }} | Frequency: {{ class[10] or 'N/A' }}</p>
         <h4 class="text-sm font-medium mt-2">Assigned Attendees</h4>
         <ul class="list-disc ml-5">
             {% for attendee in class_attendees[class[0]] %}
@@ -267,15 +267,15 @@
                     </div>
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Group Type</label>
-                        <input type="text" name="group_type" value="{{ class[6] or '' }}" class="w-full border rounded p-1 text-sm">
+                        <input type="text" name="group_type" value="{{ class[6] }}" class="w-full border rounded p-1 text-sm">
                     </div>
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Notes</label>
-                        <textarea name="notes" class="w-full border rounded p-1 text-sm h-16">{{ class[7] or '' }}</textarea>
+                        <textarea name="notes" class="w-full border rounded p-1 text-sm h-16">{{ class[7] }}</textarea>
                     </div>
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Location</label>
-                        <input type="text" name="location" value="{{ class[8] or '' }}" class="w-full border rounded p-1 text-sm">
+                        <input type="text" name="location" value="{{ class[8] }}" class="w-full border rounded p-1 text-sm">
                     </div>
                     <div class="mb-2 flex items-center">
                         <input type="checkbox" name="recurring" id="recurring_{{ class[0] }}" {% if class[9] == 1 %}checked{% endif %} class="mr-1">
@@ -410,10 +410,6 @@
     </script>
 
     <!-- Jinja2 Filter for Date Arithmetic -->
-    {% filter %}
-    {% macro to_date(date_str) %}
-    {{ datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.today() }}
-    {% endmacro %}
-    {% endfilter %}
+    {% set to_date = lambda date_str: datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.today() %}
 </div>
 {% endblock %}

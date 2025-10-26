@@ -777,7 +777,6 @@ def manage_classes():
     page = int(request.args.get('page', 1)) if view_type == 'list' else 1
     per_page = 10 if view_type == 'list' else 100
 
-    # For grid view, set start_date to Monday of the selected/current week
     if view_type == 'grid':
         if start_date:
             try:
@@ -952,11 +951,9 @@ def manage_classes():
             conn.rollback()
 
     try:
-        # Fetch counselors
         c.execute("SELECT id, username, full_name FROM users WHERE role = 'counselor'")
         counselors = c.fetchall()
 
-        # Define time slots for grid view
         time_slots = ['9-10 AM', '1-2 PM']
 
         if view_type == 'grid':
@@ -978,7 +975,6 @@ def manage_classes():
             classes = c.fetchall()
             logger.info(f"Retrieved {len(classes)} classes for grid view: {[f'{c[2]} on {c[3]}' for c in classes]}")
 
-            # Organize classes by day and time slot
             grid_data = {
                 'Monday': {slot: [] for slot in time_slots},
                 'Tuesday': {slot: [] for slot in time_slots},

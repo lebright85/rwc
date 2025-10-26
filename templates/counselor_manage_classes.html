@@ -76,6 +76,7 @@
             <button onclick="openModal('deleteClassModal{{ class[0] }}')" class="bg-red-600 text-white p-1 rounded mr-2 text-sm">Delete</button>
             <button onclick="openModal('assignAttendeeModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-sm">Assign Attendee</button>
             <button onclick="openModal('assignGroupModal{{ class[0] }}')" class="bg-green-600 text-white p-1 rounded mr-2 text-sm">Assign Group</button>
+            <button onclick="openModal('reassignCounselorModal{{ class[0] }}')" class="bg-purple-600 text-white p-1 rounded mr-2 text-sm">Reassign Counselor</button>
             {% endif %}
         </div>
 
@@ -153,6 +154,7 @@
                 <h2 class="text-lg font-bold mb-2">Delete Class</h2>
                 <p class="text-sm mb-2">Are you sure you want to delete "{{ class[2] }}" ({{ class[3] }})?</p>
                 <form method="POST" id="deleteClassForm{{ class[0] }}">
+                    <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="class_id" value="{{ class[0] }}">
                     <div class="mb-2">
                         <label class="block text-sm font-medium">Delete Option</label>
@@ -215,6 +217,35 @@
                     <div class="flex justify-end">
                         <button type="button" onclick="closeModal('assignGroupModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
                         <button type="submit" form="assignGroupForm{{ class[0] }}" class="bg-blue-600 text-white p-1 rounded text-sm">Assign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Reassign Counselor Modal -->
+        <div id="reassignCounselorModal{{ class[0] }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-md w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h2 class="text-lg font-bold mb-2">Reassign Counselor for {{ class[2] }}</h2>
+                <form method="POST" id="reassignCounselorForm{{ class[0] }}">
+                    <input type="hidden" name="action" value="reassign_counselor">
+                    <input type="hidden" name="class_id" value="{{ class[0] }}">
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium">New Counselor</label>
+                        <select name="new_counselor_id" class="w-full border rounded p-1 text-sm" required>
+                            {% for counselor in counselors %}
+                            <option value="{{ counselor[0] }}">{{ counselor[2] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if class[9] == 1 %}
+                    <div class="mb-2 flex items-center">
+                        <input type="checkbox" name="propagate" id="propagate_reassign_{{ class[0] }}" class="mr-1">
+                        <label for="propagate_reassign_{{ class[0] }}" class="text-sm">Apply to future recurring classes</label>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-end">
+                        <button type="button" onclick="closeModal('reassignCounselorModal{{ class[0] }}')" class="mr-2 bg-gray-300 p-1 rounded text-sm">Cancel</button>
+                        <button type="submit" form="reassignCounselorForm{{ class[0] }}" class="bg-purple-600 text-white p-1 rounded text-sm">Reassign</button>
                     </div>
                 </form>
             </div>

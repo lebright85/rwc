@@ -791,8 +791,165 @@ def manage_classes():
         end_date = (monday + timedelta(days=6)).strftime('%Y-%m-%d')
 
     if request.method == 'POST':
-        # ... (POST handling for add, edit, delete, assign, unassign, toggle_lock remains unchanged)
-        # (Include the POST logic from the previous response)
+        action = request.form.get('action')
+        logger.info(f"Received action in manage_classes: {action}")
+        try:
+            if action == 'add':
+                group_name = request.form['group_name']
+                class_name = request.form['class_name']
+                date = request.form['date']
+                group_hours = request.form['group_hours']
+                counselor_id = request.form['counselor_id']
+                group_type = request.form.get('group_type')
+                notes = request.form.get('notes')
+                location = request.form.get('location')
+                recurring = 1 if request.form.get('recurring') == 'on' else 0
+                frequency = request.form.get('frequency') if recurring else None
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
+                new_class_id = c.fetchone()[0]
+                conn.commit()
+                flash('Class added successfully')
+                if recurring and frequency == 'weekly':
+                    start = datetime.strptime(date, '%Y-%m-%d')
+                    max_date = (datetime.today() + timedelta(days=28)).strftime('%Y-%m-%d')
+                    current_date = start + timedelta(days=7)
+                    while current_date.strftime('%Y-%m-%d') <= max_date:
+                        new_date = current_date.strftime('%Y-%m-%d')
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND date = %s AND counselor_id = %s",
+                                  (class_name, new_date, counselor_id))
+                        if not c.fetchone():
+                            c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                                      (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, recurring, frequency))
+                            new_instance_id = c.fetchone()[0]
+                            logger.info(f"Generated recurring class {class_name} for {new_date} with id {new_instance_id}")
+                        current_date += timedelta(days=7)
+                    conn.commit()
+            elif action == 'edit':
+                class_id = request.form['class_id']
+                group_name = request.form['group_name']
+                class_name = request.form['class_name']
+                date = request.form['date']
+                group_hours = request.form['group_hours']
+                counselor_id = request.form['counselor_id']
+                group_type = request.form.get('group_type')
+                notes = request.form.get('notes')
+                location = request.form.get('location')
+                recurring = 1 if request.form.get('recurring') == 'on' else 0
+                frequency = request.form.get('frequency') if recurring else None
+                propagate = request.form.get('propagate', 'off') == 'on'
+                c.execute("UPDATE classes SET group_name = %s, class_name = %s, date = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s",
+                          (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency, class_id))
+                conn.commit()
+                attendee_ids = request.form.getlist('attendee_ids')
+                c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                for attendee_id in attendee_ids:
+                    c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (class_id, attendee_id))
+                conn.commit()
+                logger.info(f"Class {class_id} updated successfully")
+                flash('Class updated successfully')
+                if propagate and recurring:
+                    c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date > %s AND recurring = 1",
+                              (class_name, counselor_id, date))
+                    future_ids = [row[0] for row in c.fetchall()]
+                    for future_id in future_ids:
+                        c.execute("UPDATE classes SET group_name = %s, class_name = %s, group_hours = %s, counselor_id = %s, group_type = %s, notes = %s, location = %s, recurring = %s, frequency = %s WHERE id = %s",
+                                  (group_name, class_name, group_hours, counselor_id, group_type, notes, location, recurring, frequency, future_id))
+                        c.execute("DELETE FROM class_attendees WHERE class_id = %s", (future_id,))
+                        for attendee_id in attendee_ids:
+                            c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                      (future_id, attendee_id))
+                    conn.commit()
+                    logger.info(f"Propagated changes to {len(future_ids)} future recurring classes")
+                    flash(f'Propagated changes to {len(future_ids)} future recurring classes')
+            elif action == 'delete' or action == 'delete_all_future':
+                class_id = request.form['class_id']
+                c.execute("SELECT class_name, counselor_id, date, recurring FROM classes WHERE id = %s", (class_id,))
+                class_info = c.fetchone()
+                if not class_info:
+                    logger.error(f"Class {class_id} not found for deletion")
+                    flash('Class not found', 'error')
+                else:
+                    class_name, counselor_id, current_date, recurring = class_info
+                    if action == 'delete_all_future' and recurring == 1:
+                        c.execute("SELECT id FROM classes WHERE class_name = %s AND counselor_id = %s AND date >= %s AND recurring = 1",
+                                  (class_name, counselor_id, current_date))
+                        deleted_ids = [row[0] for row in c.fetchall()]
+                        if deleted_ids:
+                            c.execute("DELETE FROM class_attendees WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM attendance WHERE class_id IN %s",
+                                      (tuple(deleted_ids),))
+                            c.execute("DELETE FROM classes WHERE id IN %s",
+                                      (tuple(deleted_ids),))
+                            conn.commit()
+                            logger.info(f"Deleted {len(deleted_ids)} recurring classes (ids: {deleted_ids}) for {class_name} starting from {current_date}")
+                            flash(f'Deleted {len(deleted_ids)} recurring classes and their associated data')
+                        else:
+                            logger.warning(f"No future recurring classes found for {class_name} with counselor_id {counselor_id} on or after {current_date}")
+                            flash('No future recurring classes found to delete', 'info')
+                    else:
+                        c.execute("DELETE FROM class_attendees WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+                        c.execute("DELETE FROM classes WHERE id = %s", (class_id,))
+                        conn.commit()
+                        logger.info(f"Deleted single class {class_id}")
+                        flash('Class deleted successfully')
+            elif action == 'assign_attendee':
+                class_id = request.form['class_id']
+                attendee_id = request.form['attendee_id']
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                          (class_id, attendee_id))
+                conn.commit()
+                logger.info(f"Attendee {attendee_id} assigned to class {class_id}")
+                flash('Attendee assigned successfully')
+            elif action == 'unassign_attendee':
+                class_id = request.form['class_id']
+                attendee_id = request.form['attendee_id']
+                c.execute("DELETE FROM class_attendees WHERE class_id = %s AND attendee_id = %s", (class_id, attendee_id))
+                conn.commit()
+                logger.info(f"Attendee {attendee_id} unassigned from class {class_id}")
+                flash('Attendee unassigned successfully')
+            elif action == 'assign_group':
+                class_id = request.form['class_id']
+                group_id = request.form['group_id']
+                c.execute("SELECT attendee_id FROM attendee_groups WHERE group_id = %s", (group_id,))
+                attendee_ids = [row[0] for row in c.fetchall()]
+                if not attendee_ids:
+                    logger.warning(f"No attendees found in group {group_id} for class {class_id}")
+                    flash('No attendees found in group', 'error')
+                else:
+                    assigned_count = 0
+                    for attendee_id in attendee_ids:
+                        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                  (class_id, attendee_id))
+                        assigned_count += c.rowcount
+                    conn.commit()
+                    logger.info(f"Assigned {assigned_count} attendees from group {group_id} to class {class_id}")
+                    flash(f'Assigned {assigned_count} attendees from group to class')
+            elif action == 'toggle_lock':
+                class_id = request.form['class_id']
+                locked = request.form['locked'] == 'true'
+                c.execute("UPDATE classes SET locked = %s WHERE id = %s", (locked, class_id))
+                conn.commit()
+                logger.info(f"Class {class_id} {'locked' if locked else 'unlocked'}")
+                flash(f'Class {"locked" if locked else "unlocked"} successfully')
+            else:
+                logger.warning(f"Unknown action received: {action}")
+                flash('Invalid action', 'error')
+        except psycopg2.IntegrityError as e:
+            logger.error(f"Integrity error in manage_classes: {e}")
+            flash('Action failed due to duplicate or invalid data', 'error')
+            conn.rollback()
+        except psycopg2.Error as e:
+            logger.error(f"Database error in manage_classes: {e}")
+            flash('Error processing your request. Please try again.', 'error')
+            conn.rollback()
+        except Exception as e:
+            logger.error(f"Unexpected error in manage_classes: {e}")
+            flash('An unexpected error occurred. Please try again.', 'error')
+            conn.rollback()
 
     try:
         # Fetch counselors
@@ -800,10 +957,9 @@ def manage_classes():
         counselors = c.fetchall()
 
         # Define time slots for grid view
-        time_slots = ['9-10 AM', '1-2 PM']  # Add more as needed
+        time_slots = ['9-10 AM', '1-2 PM']
 
         if view_type == 'grid':
-            # Fetch classes for the week
             classes_query = """
                 SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.counselor_id, c.group_type, c.notes, c.location, c.recurring, c.frequency, u.full_name, c.locked
                 FROM classes c
@@ -835,7 +991,7 @@ def manage_classes():
                 day_name = class_date.strftime('%A')
                 if day_name not in grid_data:
                     continue
-                group_hours = class_[4].strip().upper()
+                group_hours = class_[4].strip().upper() if class_[4] else ''
                 time_slot = None
                 for slot in time_slots:
                     if slot in group_hours or group_hours in slot:
@@ -853,7 +1009,6 @@ def manage_classes():
                     'locked': class_[12]
                 })
 
-            # Fetch attendees and groups for modals
             c.execute("SELECT id, full_name, attendee_id FROM attendees ORDER BY full_name ASC")
             attendees = c.fetchall()
             c.execute("SELECT id, name FROM groups ORDER BY name")
@@ -873,7 +1028,6 @@ def manage_classes():
                 class_attendees[class_[0]] = c.fetchall()
 
         else:
-            # List view logic (unchanged)
             count_query = "SELECT COUNT(*) FROM classes c WHERE 1=1"
             count_params = []
             if group_filter != 'all':
@@ -954,11 +1108,8 @@ def manage_classes():
     finally:
         conn.close()
 
-    if view_type == 'grid':
-        return render_template('manage_classes.html', counselors=counselors, classes=classes, grid_data=grid_data, time_slots=time_slots, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=1, view_type=view_type)
-    else:
-        return render_template('manage_classes.html', counselors=counselors, classes=classes, grid_data={}, time_slots=time_slots, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages, view_type=view_type)
-    
+    return render_template('manage_classes.html', counselors=counselors, classes=classes, grid_data=grid_data if view_type == 'grid' else {}, time_slots=time_slots, attendees=attendees, class_attendees=class_attendees, groups=groups, sort_by=sort_by, group_filter=group_filter, counselor_filter=counselor_filter, start_date=start_date, end_date=end_date, page=page, total_pages=total_pages if view_type == 'list' else 1, view_type=view_type)
+
 @app.route('/counselor_manage_classes', methods=['GET', 'POST'])
 @login_required
 def counselor_manage_classes():

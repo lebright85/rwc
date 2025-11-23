@@ -1385,58 +1385,54 @@ def counselor_dashboard():
         flash('Access denied.', 'error')
         return redirect(url_for('login'))
 
-    # Default values (prevents "UnboundLocalError")
-    classes = []
-    class_attendees = {}
-    class_attendance = {}
-    total_pages = 1
-    prev_page_url = next_page_url = None
     sort_by = request.args.get('sort_by', 'date_asc')
     page = max(1, int(request.args.get('page', 1)))
     per_page = 15
     offset = (page - 1) * per_page
 
+    # Safe defaults
+    classes = []
+    class_attendees = {}
+    class_attendance = {}
+    total_pages = 1
+    prev_page_url = next_page_url = None
+
     conn = get_db_connection()
     c = conn.cursor()
 
     try:
-        # ——— Attendance submission ———
+        # Attendance submission
         if request.method == 'POST' and 'attendance' in request.form:
             class_id = request.form['class_id']
-            present_ids = request.form.getlist('present')
-            absent_ids = request.form.getlist('absent')
+            present = request.form.getlist('present')
+            absent = request.form.getlist('absent')
 
             c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-            for aid in present_ids:
-                c.execute("""
-                    INSERT INTO attendance (class_id, attendee_id, status)
-                    VALUES (%s, %s, 'present')
-                    ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'
-                """, (class_id, aid))
-            for aid in absent_ids:
-                c.execute("""
-                    INSERT INTO attendance (class_id, attendee_id, status)
-                    VALUES (%s, %s, 'absent')
-                    ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'absent'
-                """, (class_id, aid))
+            for aid in present:
+                c.execute("""INSERT INTO attendance (class_id, attendee_id, status)
+                             VALUES (%s, %s, 'present')
+                             ON CONFLICT (class_id, attendee_id) DO UPDATE SET status='present'""",
+                          (class_id, aid))
+            for aid in absent:
+                c.execute("""INSERT INTO attendance (class_id, attendee_id, status)
+                             VALUES (%s, %s, 'absent')
+                             ON CONFLICT (class_id, attendee_id) DO UPDATE SET status='absent'""",
+                          (class_id, aid))
             conn.commit()
             flash('Attendance saved successfully!', 'success')
 
-        # ——— Sorting ———
+        # Sorting
         order_clause = {
             'date_desc': "ORDER BY c.date DESC, c.group_hours ASC",
-            'group':     "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC",
-        }.get(sort_by, "ORDER BY c.date ASC, c.group_hours ASC")   # default = oldest first
+            'group':     "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
+        }.get(sort_by, "ORDER BY c.date ASC, c.group_hours ASC")  # oldest first by default
 
-        # ——— Count total ———
-        c.execute("""
-            SELECT COUNT(*) FROM classes 
-            WHERE counselor_id = %s AND (deleted_at IS NULL)
-        """, (current_user.id,))
+        # Count total classes
+        c.execute("SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND (deleted_at IS NULL)", (current_user.id,))
         total_classes = c.fetchone()[0]
-        total_pages = math.ceil(total_classes / per_page) if total_classes else 1
+        total_pages = (total_classes + per_page - 1) // per_page  # ← INTEGER, NO FLOAT!
 
-        # ——— Fetch classes ———
+        # Fetch paginated classes
         c.execute(f"""
             SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
                    c.location, c.notes, c.recurring, c.frequency
@@ -1447,33 +1443,31 @@ def counselor_dashboard():
         """, (current_user.id, per_page, offset))
         classes = c.fetchall()
 
-        # ——— Attendees & existing attendance ———
+        # Load attendees + current attendance
         class_attendees = {}
         class_attendance = {}
         for cls in classes:
-            class_id = cls[0]
-
+            cid = cls[0]
             c.execute("""
                 SELECT a.id, a.full_name, a.attendee_id
                 FROM attendees a
                 JOIN class_attendees ca ON a.id = ca.attendee_id
                 WHERE ca.class_id = %s
                 ORDER BY a.full_name
-            """, (class_id,))
-            class_attendees[class_id] = c.fetchall()
+            """, (cid,))
+            class_attendees[cid] = c.fetchall()
 
-            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (class_id,))
-            class_attendance[class_id] = {str(row[0]): row[1] for row in c.fetchall()}
+            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (cid,))
+            class_attendance[cid] = {str(r[0]): r[1] for r in c.fetchall()}
 
-        # ——— Pagination links (preserve sort) ———
+        # Pagination URLs that preserve sort
         base = url_for('counselor_dashboard', sort_by=sort_by)
         prev_page_url = f"{base}&page={page-1}" if page > 1 else None
         next_page_url = f"{base}&page={page+1}" if page < total_pages else None
 
     except Exception as e:
         logger.error(f"counselor_dashboard error: {e}", exc_info=True)
-        flash('An error occurred loading your dashboard.', 'error')
-
+        flash('Temporary error – please refresh.', 'error')
     finally:
         conn.close()
 

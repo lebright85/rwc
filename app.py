@@ -1396,35 +1396,43 @@ def counselor_dashboard():
     class_attendees = {}
     class_attendance = {}
     total_pages = 1
-    prev_page_url = next_page_url = None
+    prev_page_url = None
+    next_page_url = None
 
     try:
-        # Save attendance
+        # ——— Save attendance ———
         if request.method == 'POST' and 'attendance' in request.form:
             class_id = request.form['class_id']
             present = request.form.getlist('present')
+
             c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
             for aid in present:
-                c.execute("""INSERT INTO attendance (class_id, attendee_id, status)
-                             VALUES (%s, %s, 'present')
-                             ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'""",
-                          (class_id, aid))
+                c.execute("""
+                    INSERT INTO attendance (class_id, attendee_id, status)
+                    VALUES (%s, %s, 'present')
+                    ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'
+                """, (class_id, aid))
             conn.commit()
             flash('Attendance saved successfully!', 'success')
 
-        # Sorting
-        order = "ORDER BY c.date ASC, c.group_hours ASC"
+        # ——— Sorting ———
         if sort_by == 'date_desc':
             order = "ORDER BY c.date DESC, c.group_hours ASC"
         elif sort_by == 'group':
             order = "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
+        else:
+            order = "ORDER BY c.date ASC, c.group_hours ASC"   # default = oldest first
 
-        # Count total classes
-        c.execute("SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND deleted_at IS NULL", (current_user.id,))
-        total = c.fetchone()[0]  # ← THIS WAS BROKEN BEFORE
-        total_pages = (total + per_page - 1) // per_page
+        # ——— Count total classes ———
+        c.execute("""
+            SELECT COUNT(*) 
+            FROM classes 
+            WHERE counselor_id = %s AND deleted_at IS NULL
+        """, (current_user.id,))
+        total_classes = c.fetchone()[0]
+        total_pages = (total_classes + per_page - 1) // per_page
 
-        # Fetch classes with pagination
+        # ——— Fetch paginated classes ———
         c.execute(f"""
             SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
                    COALESCE(c.location, 'Not specified'), c.recurring
@@ -1435,41 +1443,52 @@ def counselor_dashboard():
         """, (current_user.id, per_page, offset))
         classes = c.fetchall()
 
-        # Load attendees + current attendance status
+        # ——— Load attendees & existing attendance ———
         for cls in classes:
-            cid = cls[0]
+            class_id = cls[0]
+
+            # attendees
             c.execute("""
                 SELECT a.id, a.full_name 
-                FROM attendees a 
-                JOIN class_attendees ca ON a.id = ca.attendee_id 
-                WHERE ca.class_id = %s 
+                FROM attendees a
+                JOIN class_attendees ca ON a.id = ca.attendee_id
+                WHERE ca.class_id = %s
                 ORDER BY a.full_name
-            """, (cid,))
-            class_attendees[cid] = c.fetchall()
+            """, (class_id,))
+            class_attendees[class_id] = c.fetchall()
 
-            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (cid,))
-            class_attendance[cid] = {str(row[0]): row[1] for row in c.fetchall()}
+            # current attendance status
+            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (class_id,))
+            attendance_dict = {}
+            for row in c.fetchall():
+                attendance_dict[str(row[0])] = row[1]
+            class_attendance[class_id] = attendance_dict
 
-        # Pagination URLs (preserve sort)
-        base = url_for('counselor_dashboard', sort_by=sort_by)
-        prev_page_url = f"{base}&page={page-1}" if page > 1 else None
-        next_page_url = f"{base}&page={page+1}" if page < total_pages else None
+        # ——— Pagination URLs ———
+        base_url = url_for('counselor_dashboard', sort_by=sort_by)
+        if page > 1:
+            prev_page_url = f"{base_url}&page={page-1}"
+        if page < total_pages:
+            next_page_url = f"{base_url}&page={page+1}"
 
     except Exception as e:
         logger.error(f"Counselor dashboard error: {e}", exc_info=True)
-        flash('Error loading dashboard.', 'error')
+        flash('Temporary error – please refresh.', 'error')
+
     finally:
         conn.close()
 
-    return render_template('counselor_dashboard.html',
-                           classes=classes,
-                           class_attendees=class_attendees,
-                           class_attendance=class_attendance,
-                           sort_by=sort_by,
-                           page=page,
-                           total_pages=total_pages,
-                           prev_page_url=prev_page_url,
-                           next_page_url=next_page_url)
+    return render_template(
+        'counselor_dashboard.html',
+        classes=classes,
+        class_attendees=class_attendees,
+        class_attendance=class_attendance,
+        sort_by=sort_by,
+        page=page,
+        total_pages=total_pages,
+        prev_page_url=prev_page_url,
+        next_page_url=next_page_url,
+    )
 
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required

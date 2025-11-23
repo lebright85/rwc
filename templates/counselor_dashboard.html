@@ -1,149 +1,127 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-6xl mx-auto p-4">
-    <h1 class="text-3xl font-bold mb-8 text-center">Counselor Dashboard</h1>
+<div class="max-w-7xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-8 text-center text-blue-800">Counselor Dashboard</h1>
 
-    <!-- Filter & Sort Bar -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Group Filter -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Filter by Group</label>
-                <select name="group_filter" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
-                    <option value="all" {% if group_filter == 'all' %}selected{% endif %}>All Groups</option>
-                    {% for group in groups %}
-                    <option value="{{ group[1] }}" {% if group_filter == group[1] %}selected{% endif %}>{{ group[1] }}</option>
-                    {% endfor %}
+    <!-- Sort Bar Only (we keep it simple and working) -->
+    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-semibold text-gray-700">Sort by:</span>
+                <select onchange="location = this.value" class="border border-gray-300 rounded-lg px-5 py-3 text-sm font-medium focus:ring-2 focus:ring-blue-500">
+                    <option value="{{ url_for('counselor_dashboard', sort_by='date_asc', page=1) }}"
+                        {% if sort_by == 'date_asc' %}selected{% endif %}>
+                        Date (Earliest First)
+                    </option>
+                    <option value="{{ url_for('counselor_dashboard', sort_by='date_desc', page=1) }}"
+                        {% if sort_by == 'date_desc' %}selected{% endif %}>
+                        Date (Latest First)
+                    </option>
+                    <option value="{{ url_for('counselor_dashboard', sort_by='group', page=1) }}"
+                        {% if sort_by == 'group' %}selected{% endif %}>
+                        Group Name
+                    </option>
                 </select>
             </div>
 
-            <!-- Sort By -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Sort By</label>
-                <form method="GET" class="inline">
-                    <input type="hidden" name="group_filter" value="{{ group_filter }}">
-                    <input type="hidden" name="page" value="1">
-                    <select name="sort_by" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
-                        <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>Date (Earliest First)</option>
-                        <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Date (Latest First)</option>
-                        <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group Name</option>
-                    </select>
-                </form>
-            </div>
-
-            <!-- Quick Stats -->
-            <div class="text-right md:text-left">
-                <p class="text-sm text-gray-600">Total Classes: <span class="font-bold text-blue-600">{{ total_classes }}</span></p>
-                <p class="text-sm text-gray-600">This Page: <span class="font-bold text-green-600">{{ classes|length }}</span></p>
+            <div class="text-right">
+                <p class="text-sm text-gray-600">
+                    Showing <strong>{{ classes|length }}</strong> of 
+                    <strong>{{ (total_pages - 1) * 15 + classes|length }}</strong> classes
+                    • Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+                </p>
             </div>
         </div>
     </div>
 
     <!-- Classes Grid -->
     {% if classes %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {% for class in classes %}
-        <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-l-4 {% if class[9] == 1 %}border-purple-500{% else %}border-blue-500{% endif %}">
-            <div class="flex justify-between items-start mb-3">
-                <h3 class="text-lg font-bold text-gray-800">{{ class[2] }}</h3>
-                {% if class[9] == 1 %}
-                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Recurring</span>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 mb-12">
+        {% for cls in classes %}
+        {% set class_id = cls[0] %}
+        {% set class_name = cls[1] %}
+        {% set group_name = cls[2] %}
+        {% set date = cls[3] %}
+        {% set time = cls[4] %}
+        {% set location = cls[5] or 'Not specified' %}
+        {% set notes = cls[6] or '' %}
+        {% set recurring = cls[7] %}
+        {% set frequency = cls[8] %}
+
+        <div class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 {% if recurring %}border-purple-500{% else %}border-blue-500{% endif %} p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold text-gray-800">{{ class_name }}</h3>
+                {% if recurring %}
+                <span class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-medium">Recurring</span>
                 {% endif %}
             </div>
 
-            <div class="text-sm text-gray-600 space-y-1">
-                <p><strong>Group:</strong> {{ class[1] }}</p>
-                <p><strong>Date:</strong> {{ class[3] }}</p>
-                <p><strong>Time:</strong> {{ class[4] }}</p>
-                <p><strong>Location:</strong> {{ class[8] or 'Not specified' }}</p>
-                <p><strong>Counselor:</strong> {{ class[11] }}</p>
+            <div class="space-y-2 text-sm text-gray-700">
+                <p><strong>Group:</strong> {{ group_name }}</p>
+                <p><strong>Date:</strong> {{ date }}</p>
+                <p><strong>Time:</strong> {{ time }}</p>
+                <p><strong>Location:</strong> {{ location }}</p>
             </div>
 
-            <div class="mt-4 pt-4 border-t border-gray-200">
-                <div class="flex flex-wrap gap-2">
-                    <a href="{{ url_for('take_attendance', class_id=class[0]) }}" 
-                       class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition">
-                        Take Attendance
-                    </a>
-                    <button onclick="openModal('editModal{{ class[0] }}')" 
-                            class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition">
-                        Edit
-                    </button>
-                    <button onclick="openModal('deleteModal{{ class[0] }}')" 
-                            class="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 transition">
-                        Delete
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Edit Modal -->
-        <div id="editModal{{ class[0] }}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-            <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                <h2 class="text-xl font-bold mb-4">Edit Class</h2>
-                <form method="POST" action="{{ url_for('counselor_dashboard') }}">
-                    <input type="hidden" name="action" value="edit">
-                    <input type="hidden" name="class_id" value="{{ class[0] }}">
-                    <!-- Form fields same as before -->
-                    <div class="space-y-3">
-                        <input type="text" name="class_name" value="{{ class[2] }}" class="w-full border rounded px-3 py-2" required>
-                        <input type="date" name="date" value="{{ class[3] }}" class="w-full border rounded px-3 py-2" required>
-                        <input type="text" name="group_hours" value="{{ class[4] }}" placeholder="Time" class="w-full border rounded px-3 py-2" required>
-                        <input type="text" name="location" value="{{ class[8] }}" placeholder="Location" class="w-full border rounded px-3 py-2">
+            <!-- Attendance Form -->
+            {% if class_attendees[class_id] %}
+            <div class="mt-5 pt-5 border-t border-gray-200">
+                <form method="POST">
+                    <input type="hidden" name="attendance" value="1">
+                    <input type="hidden" name="class_id" value="{{ class_id }}">
+                    <div class="space-y-2 max-h-48 overflow-y-auto">
+                        {% for attendee in class_attendees[class_id] %}
+                        {% set att_id = attendee[0] %}
+                        {% set att_name = attendee[1] %}
+                        {% set current_status = class_attendance[class_id].get(att_id|string, 'present') %}
+                        <label class="flex items-center gap-3 text-sm">
+                            <input type="checkbox" name="present" value="{{ att_id }}"
+                                {% if current_status == 'present' %}checked{% endif %}
+                                class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
+                            <span class="{% if current_status == 'absent' %}line-through text-gray-500{% else %}text-gray-800{% endif %}">
+                                {{ att_name }}
+                            </span>
+                        </label>
+                        <input type="hidden" name="absent" value="{{ att_id }}">
+                        {% endfor %}
                     </div>
-                    <div class="flex justify-end gap-3 mt-6 sticky bottom-0 bg-white pt-4 border-t">
-                        <button type="button" onclick="closeModal('editModal{{ class[0] }}')" 
-                                class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancel</button>
-                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Save Changes</button>
-                    </div>
+                    <button type="submit"
+                        class="mt-4 w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 transition">
+                        Save Attendance
+                    </button>
                 </form>
             </div>
-        </div>
-
-        <!-- Delete Modal -->
-        <div id="deleteModal{{ class[0] }}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-            <div class="bg-white rounded-lg p-6 w-full max-w-sm">
-                <h3 class="text-lg font-bold text-red-600 mb-4">Delete Class?</h3>
-                <p class="text-sm text-gray-700 mb-6">Delete "{{ class[2] }}" on {{ class[3] }}?</p>
-                <form method="POST" action="{{ url_for('counselor_dashboard') }}" class="flex justify-end gap-3">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="class_id" value="{{ class[0] }}">
-                    <button type="button" onclick="closeModal('deleteModal{{ class[0] }}')" 
-                            class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancel</button>
-                    <button type="submit" class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
-                </form>
-            </div>
+            {% else %}
+            <p class="text-sm text-orange-600 mt-4 italic">No attendees assigned yet.</p>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
 
     <!-- Pagination -->
-    <div class="flex justify-center items-center gap-4 mt-8">
-        {% if page > 1 %}
-        <a href="?page={{ page - 1 }}&sort_by={{ sort_by }}&group_filter={{ group_filter }}" 
-           class="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700">Previous</a>
+    <div class="flex justify-center items-center gap-6 mt-12">
+        {% if prev_page_url %}
+        <a href="{{ prev_page_url }}" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
+            ← Previous
+        </a>
         {% endif %}
-        <span class="text-lg font-medium">Page {{ page }} of {{ total_pages }}</span>
-        {% if page < total_pages %}
-        <a href="?page={{ page + 1 }}&sort_by={{ sort_by }}&group_filter={{ group_filter }}" 
-           class="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700">Next</a>
+
+        <span class="text-lg font-semibold text-gray-700">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if next_page_url %}
+        <a href="{{ next_page_url }}" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
+            Next →
+        </a>
         {% endif %}
     </div>
 
     {% else %}
-    <div class="text-center py-12">
-        <p class="text-xl text-gray-600">No classes found.</p>
-        <p class="text-sm text-gray-500 mt-2">Try adjusting your filters or add a new class.</p>
+    <div class="text-center py-20">
+        <p class="text-2xl text-gray-600 font-light">No classes found for this period.</p>
+        <p class="text-gray-500 mt-4">Try changing the sort order or check back later.</p>
     </div>
     {% endif %}
 </div>
-
-<script>
-function openModal(id) {
-    document.getElementById(id).classList.remove('hidden');
-}
-function closeModal(id) {
-    document.getElementById(id).classList.add('hidden');
-}
-</script>
 {% endblock %}

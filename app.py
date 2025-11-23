@@ -1384,43 +1384,87 @@ def counselor_dashboard():
     if current_user.role != 'counselor':
         return redirect(url_for('login'))
 
+    sort_by = request.args.get('sort_by', 'date_asc')
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 15
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     c = conn.cursor()
 
+    classes = []
+    class_attendees = {}
+    class_attendance = {}
+    total_pages = 1
+    prev_page_url = next_page_url = None
+
     try:
-        # Super simple query — only what we need
-        c.execute("""
-            SELECT id, class_name, group_name, date, group_hours, 
-                   COALESCE(location, 'Not specified')
-            FROM classes 
-            WHERE counselor_id = %s AND (deleted_at IS NULL)
-            ORDER BY date ASC, group_hours ASC
-        """, (current_user.id,))
+        # Attendance saving
+        if request.method == 'POST' and 'attendance' in request.form:
+            class_id = request.form['class_id']
+            present = request.form.getlist('present')
+            c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+            for aid in present:
+                c.execute("""INSERT INTO attendance (class_id, attendee_id, status)
+                             VALUES (%s, %s, 'present')
+                             ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'""",
+                          (class_id, aid))
+            conn.commit()
+            flash('Attendance saved successfully!', 'success')
+
+        # Sorting
+        order = "ORDER BY c.date ASC, c.group_hours ASC"
+        if sort_by == 'date_desc':
+            order = "ORDER BY c.date DESC, c.group_hours ASC"
+        elif sort_by == 'group':
+            order = "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
+
+        # Count + Pagination
+        c.execute("SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND deleted_at IS NULL", (current_user.id,))
+        total = c.fetchone()[  # Fixed typo here
+        total_pages = (total + per_page - 1) // per_page
+
+        # Fetch classes
+        c.execute(f"""
+            SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
+                   COALESCE(c.location, 'Not specified'), c.recurring
+            FROM classes c
+            WHERE c.counselor_id = %s AND deleted_at IS NULL
+            {order}
+            LIMIT %s OFFSET %s
+        """, (current_user.id, per_page, offset))
         classes = c.fetchall()
 
-        # Load attendees for each class
-        class_attendees = {}
+        # Attendees + current attendance
         for cls in classes:
-            class_id = cls[0]
-            c.execute("""
-                SELECT a.id, a.full_name 
-                FROM attendees a
-                JOIN class_attendees ca ON a.id = ca.attendee_id
-                WHERE ca.class_id = %s
-                ORDER BY a.full_name
-            """, (class_id,))
-            class_attendees[class_id] = c.fetchall()
+            cid = cls[0]
+            c.execute("SELECT a.id, a.full_name FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s ORDER BY a.full_name", (cid,))
+            class_attendees[cid] = c.fetchall()
+
+            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (cid,))
+            class_attendance[cid] = {str(r[0]): r[1] for r in c.fetchall()}
+
+        # Pagination URLs
+        base = url_for('counselor_dashboard', sort_by=sort_by)
+        prev_page_url = f"{base}&page={page-1}" if page > 1 else None
+        next_page_url = f"{base}&page={page+1}" if page < total_pages else None
 
     except Exception as e:
-        logger.error(f"Dashboard error: {e}", exc_info=True)
-        classes = []
-        class_attendees = {}
+        logger.error(f"Counselor dashboard error: {e}", exc_info=True)
+        flash('Error loading dashboard.', 'error')
     finally:
         conn.close()
 
     return render_template('counselor_dashboard.html',
                            classes=classes,
-                           class_attendees=class_attendees)
+                           class_attendees=class_attendees,
+                           class_attendance=class_attendance,
+                           sort_by=sort_by,
+                           page=page,
+                           total_pages=total_pages,
+                           prev_page_url=prev_page_url,
+                           next_page_url=next_page_url)
+                           
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required
 def class_attendance(class_id):

@@ -1399,7 +1399,7 @@ def counselor_dashboard():
     prev_page_url = next_page_url = None
 
     try:
-        # Attendance saving
+        # Save attendance
         if request.method == 'POST' and 'attendance' in request.form:
             class_id = request.form['class_id']
             present = request.form.getlist('present')
@@ -1419,12 +1419,12 @@ def counselor_dashboard():
         elif sort_by == 'group':
             order = "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
 
-        # Count + Pagination
+        # Count total classes
         c.execute("SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND deleted_at IS NULL", (current_user.id,))
-        total = c.fetchone()[  # Fixed typo here
+        total = c.fetchone()[0]  # ← THIS WAS BROKEN BEFORE
         total_pages = (total + per_page - 1) // per_page
 
-        # Fetch classes
+        # Fetch classes with pagination
         c.execute(f"""
             SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
                    COALESCE(c.location, 'Not specified'), c.recurring
@@ -1435,16 +1435,22 @@ def counselor_dashboard():
         """, (current_user.id, per_page, offset))
         classes = c.fetchall()
 
-        # Attendees + current attendance
+        # Load attendees + current attendance status
         for cls in classes:
             cid = cls[0]
-            c.execute("SELECT a.id, a.full_name FROM attendees a JOIN class_attendees ca ON a.id = ca.attendee_id WHERE ca.class_id = %s ORDER BY a.full_name", (cid,))
+            c.execute("""
+                SELECT a.id, a.full_name 
+                FROM attendees a 
+                JOIN class_attendees ca ON a.id = ca.attendee_id 
+                WHERE ca.class_id = %s 
+                ORDER BY a.full_name
+            """, (cid,))
             class_attendees[cid] = c.fetchall()
 
             c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (cid,))
-            class_attendance[cid] = {str(r[0]): r[1] for r in c.fetchall()}
+            class_attendance[cid] = {str(row[0]): row[1] for row in c.fetchall()}
 
-        # Pagination URLs
+        # Pagination URLs (preserve sort)
         base = url_for('counselor_dashboard', sort_by=sort_by)
         prev_page_url = f"{base}&page={page-1}" if page > 1 else None
         next_page_url = f"{base}&page={page+1}" if page < total_pages else None
@@ -1464,7 +1470,7 @@ def counselor_dashboard():
                            total_pages=total_pages,
                            prev_page_url=prev_page_url,
                            next_page_url=next_page_url)
-                           
+
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required
 def class_attendance(class_id):

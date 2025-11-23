@@ -1378,99 +1378,13 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/counselor_dashboard', methods=['GET', 'POST'])
+@app.route('/counselor_dashboard')
 @login_required
 def counselor_dashboard():
     if current_user.role != 'counselor':
-        flash('Access denied.', 'error')
         return redirect(url_for('login'))
-
-    # Parameters
-    sort_by = request.args.get('sort_by', 'date_asc')
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = 15
-    offset = (page - 1) * per_page
-
-    # Defaults
-    classes = []
-    class_attendees = {}
-    class_attendance = {}
-    total_pages = 1
-    prev_page_url = next_page_url = None
-
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    try:
-        # Save attendance
-        if request.method == 'POST' and 'attendance' in request.form:
-            class_id = request.form['class_id']
-            present = request.form.getlist('present')
-            c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-            for pid in present:
-                c.execute("INSERT INTO attendance (class_id, attendee_id, status) VALUES (%s, %s, 'present') "
-                          "ON CONFLICT (class_id, attendee_id) DO UPDATE SET status='present'", (class_id, pid))
-            conn.commit()
-            flash('Attendance saved!', 'success')
-
-        # Sort order
-        order = "ORDER BY c.date ASC, c.group_hours ASC"
-        if sort_by == 'date_desc':
-            order = "ORDER BY c.date DESC, c.group_hours ASC"
-        elif sort_by == 'group':
-            order = "ORDER BY c.group_name ASC, c.date ASC"
-
-        # Count
-        c.execute("SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND (deleted_at IS NULL)", (current_user.id,))
-        total = c.fetchone()[0]
-        total_pages = (total + per_page - 1) // per_page
-
-        # Fetch classes
-        c.execute(f"""
-            SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
-                   COALESCE(c.location, 'Not specified'), c.notes, c.recurring, c.frequency
-            FROM classes c
-            WHERE c.counselor_id = %s AND (c.deleted_at IS NULL)
-            {order}
-            LIMIT %s OFFSET %s
-        """, (current_user.id, per_page, offset))
-        classes = c.fetchall()
-
-        # Attendees & current attendance
-        for cls in classes:
-            cid = cls[0]
-            c.execute("""
-                SELECT a.id, a.full_name FROM attendees a
-                JOIN class_attendees ca ON a.id = ca.attendee_id
-                WHERE ca.class_id = %s ORDER BY a.full_name
-            """, (cid,))
-            class_attendees[cid] = c.fetchall()
-
-            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (cid,))
-            class_attendance[cid] = {str(r[0]): r[1] for r in c.fetchall()}
-
-        # Pagination URLs
-        base = url_for('counselor_dashboard', sort_by=sort_by)
-        prev_page_url = f"{base}&page={page-1}" if page > 1 else None
-        next_page_url = f"{base}&page={page+1}" if page < total_pages else None
-
-    except Exception as e:
-        logger.error(f"counselor_dashboard crash: {e}", exc_info=True)
-        flash('Dashboard temporarily unavailable. Please try again.', 'error')
-    finally:
-        conn.close()
-
-    return render_template(
-        'counselor_dashboard.html',
-        classes=classes,
-        class_attendees=class_attendees,
-        class_attendance=class_attendance,
-        sort_by=sort_by,
-        page=page,
-        total_pages=total_pages,
-        prev_page_url=prev_page_url,
-        next_page_url=next_page_url,
-    )
+    
+    return "<h1>COUNSELOR DASHBOARD WORKS!</h1><p>If you see this, the route and login are 100% fine.</p>"
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required
 def class_attendance(class_id):

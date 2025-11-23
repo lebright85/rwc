@@ -1377,8 +1377,6 @@ def manage_attendees():
 def logout():
     logout_user()
     return redirect(url_for('login'))
-import math                  # ← THIS WAS MISSING BEFORE
-# ... your other imports ...
 
 @app.route('/counselor_dashboard', methods=['GET', 'POST'])
 @login_required

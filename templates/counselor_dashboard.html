@@ -1,127 +1,69 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-7xl mx-auto p-6">
-    <h1 class="text-3xl font-bold mb-8 text-center text-blue-800">Counselor Dashboard</h1>
+<div class="max-w-6xl mx-auto p-6">
 
-    <!-- Sort Bar Only (we keep it simple and working) -->
-    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-        <div class="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div class="flex items-center gap-4">
-                <span class="text-sm font-semibold text-gray-700">Sort by:</span>
-                <select onchange="location = this.value" class="border border-gray-300 rounded-lg px-5 py-3 text-sm font-medium focus:ring-2 focus:ring-blue-500">
-                    <option value="{{ url_for('counselor_dashboard', sort_by='date_asc', page=1) }}"
-                        {% if sort_by == 'date_asc' %}selected{% endif %}>
-                        Date (Earliest First)
-                    </option>
-                    <option value="{{ url_for('counselor_dashboard', sort_by='date_desc', page=1) }}"
-                        {% if sort_by == 'date_desc' %}selected{% endif %}>
-                        Date (Latest First)
-                    </option>
-                    <option value="{{ url_for('counselor_dashboard', sort_by='group', page=1) }}"
-                        {% if sort_by == 'group' %}selected{% endif %}>
-                        Group Name
-                    </option>
-                </select>
-            </div>
+  <h1 class="text-3xl font-bold text-center mb-8">Counselor Dashboard</h1>
 
-            <div class="text-right">
-                <p class="text-sm text-gray-600">
-                    Showing <strong>{{ classes|length }}</strong> of 
-                    <strong>{{ (total_pages - 1) * 15 + classes|length }}</strong> classes
-                    • Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
-                </p>
-            </div>
+  <!-- Sort -->
+  <div class="mb-8 text-center">
+    <form method="GET" class="inline">
+      <select name="sort_by" onchange="this.form.submit()"
+              class="px-6 py-3 border rounded-lg text-lg">
+        <option value="date_asc"  {% if sort_by == 'date_asc' %}selected{% endif %}>Earliest First</option>
+        <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Latest First</option>
+        <option value="group"     {% if sort_by == 'group' %}selected{% endif %}>Group Name</option>
+      </select>
+    </form>
+  </div>
+
+  {% if classes %}
+    {% for cls in classes %}
+      {% set cid = cls[0] %}
+      <div class="bg-white rounded-lg shadow p-6 mb-6 border-l-4 {% if cls[7] %}border-purple-500{% else %}border-blue-500{% endif %}">
+        <div class="flex justify-between items-start">
+          <div>
+            <h3 class="text-2xl font-bold">{{ cls[1] }}</h3>
+            <p><strong>Group:</strong> {{ cls[2] }}</p>
+            <p><strong>Date:</strong> {{ cls[3] }} | <strong>Time:</strong> {{ cls[4] }}</p>
+            <p><strong>Location:</strong> {{ cls[5] }}</p>
+            {% if cls[7] %}<span class="text-purple-600 font-semibold">Recurring ({{ cls[8] or 'weekly' }})</span>{% endif %}
+          </div>
         </div>
-    </div>
 
-    <!-- Classes Grid -->
-    {% if classes %}
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 mb-12">
-        {% for cls in classes %}
-        {% set class_id = cls[0] %}
-        {% set class_name = cls[1] %}
-        {% set group_name = cls[2] %}
-        {% set date = cls[3] %}
-        {% set time = cls[4] %}
-        {% set location = cls[5] or 'Not specified' %}
-        {% set notes = cls[6] or '' %}
-        {% set recurring = cls[7] %}
-        {% set frequency = cls[8] %}
-
-        <div class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 {% if recurring %}border-purple-500{% else %}border-blue-500{% endif %} p-6">
-            <div class="flex justify-between items-start mb-4">
-                <h3 class="text-xl font-bold text-gray-800">{{ class_name }}</h3>
-                {% if recurring %}
-                <span class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-medium">Recurring</span>
-                {% endif %}
+        <!-- Attendance -->
+        {% if class_attendees[cid] %}
+          <form method="POST" class="mt-4">
+            <input type="hidden" name="attendance" value="1">
+            <input type="hidden" name="class_id" value="{{ cid }}">
+            <div class="space-y-2">
+              {% for att in class_attendees[cid] %}
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" name="present" value="{{ att[0] }}"
+                         {% if class_attendance[cid].get(att[0]|string, 'present') == 'present' %}checked{% endif %}>
+                  <span>{{ att[1] }}</span>
+                </label>
+              {% endfor %}
             </div>
-
-            <div class="space-y-2 text-sm text-gray-700">
-                <p><strong>Group:</strong> {{ group_name }}</p>
-                <p><strong>Date:</strong> {{ date }}</p>
-                <p><strong>Time:</strong> {{ time }}</p>
-                <p><strong>Location:</strong> {{ location }}</p>
-            </div>
-
-            <!-- Attendance Form -->
-            {% if class_attendees[class_id] %}
-            <div class="mt-5 pt-5 border-t border-gray-200">
-                <form method="POST">
-                    <input type="hidden" name="attendance" value="1">
-                    <input type="hidden" name="class_id" value="{{ class_id }}">
-                    <div class="space-y-2 max-h-48 overflow-y-auto">
-                        {% for attendee in class_attendees[class_id] %}
-                        {% set att_id = attendee[0] %}
-                        {% set att_name = attendee[1] %}
-                        {% set current_status = class_attendance[class_id].get(att_id|string, 'present') %}
-                        <label class="flex items-center gap-3 text-sm">
-                            <input type="checkbox" name="present" value="{{ att_id }}"
-                                {% if current_status == 'present' %}checked{% endif %}
-                                class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
-                            <span class="{% if current_status == 'absent' %}line-through text-gray-500{% else %}text-gray-800{% endif %}">
-                                {{ att_name }}
-                            </span>
-                        </label>
-                        <input type="hidden" name="absent" value="{{ att_id }}">
-                        {% endfor %}
-                    </div>
-                    <button type="submit"
-                        class="mt-4 w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 transition">
-                        Save Attendance
-                    </button>
-                </form>
-            </div>
-            {% else %}
-            <p class="text-sm text-orange-600 mt-4 italic">No attendees assigned yet.</p>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
+            <button type="submit" class="mt-4 px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+              Save Attendance
+            </button>
+          </form>
+        {% else %}
+          <p class="text-orange-600 mt-4 italic">No attendees assigned</p>
+        {% endif %}
+      </div>
+    {% endfor %}
 
     <!-- Pagination -->
-    <div class="flex justify-center items-center gap-6 mt-12">
-        {% if prev_page_url %}
-        <a href="{{ prev_page_url }}" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
-            ← Previous
-        </a>
-        {% endif %}
-
-        <span class="text-lg font-semibold text-gray-700">
-            Page {{ page }} of {{ total_pages }}
-        </span>
-
-        {% if next_page_url %}
-        <a href="{{ next_page_url }}" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
-            Next →
-        </a>
-        {% endif %}
+    <div class="flex justify-center gap-8 mt-10 text-xl">
+      {% if prev_page_url %}<a href="{{ prev_page_url }}" class="text-blue-600 hover:underline">Previous</a>{% endif %}
+      <span>Page {{ page }} of {{ total_pages }}</span>
+      {% if next_page_url %}<a href="{{ next_page_url }}" class="text-blue-600 hover:underline">Next</a>{% endif %}
     </div>
 
-    {% else %}
-    <div class="text-center py-20">
-        <p class="text-2xl text-gray-600 font-light">No classes found for this period.</p>
-        <p class="text-gray-500 mt-4">Try changing the sort order or check back later.</p>
-    </div>
-    {% endif %}
+  {% else %}
+    <p class="text-center text-2xl text-gray-500 mt-20">No classes found.</p>
+  {% endif %}
+
 </div>
 {% endblock %}

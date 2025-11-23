@@ -1377,67 +1377,134 @@ def manage_attendees():
 def logout():
     logout_user()
     return redirect(url_for('login'))
-
-@app.route('/counselor_dashboard')
+@app.route('/counselor_dashboard', methods=['GET', 'POST'])
 @login_required
 def counselor_dashboard():
     if current_user.role != 'counselor':
+        flash('Access denied.', 'error')
         return redirect(url_for('login'))
+
     conn = get_db_connection()
     c = conn.cursor()
+
+    # === Parameters ===
+    sort_by = request.args.get('sort_by', 'date_asc')  # date_asc (default), date_desc, group
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 15
+    offset = (page - 1) * per_page
+
+    # Default values in case of error
+    classes = []
+    class_attendees = {}
+    class_attendance = {}
+    total_pages = 1
+    prev_page_url = next_page_url = None
+
     try:
-        c.execute("SELECT full_name, credentials FROM users WHERE id = %s AND role = 'counselor'",
-                  (current_user.id,))
-        counselor = c.fetchone()
-        if not counselor:
-            logger.warning(f"Counselor not found for user_id: {current_user.id}")
-            flash('Counselor not found')
-            return redirect(url_for('login'))
-        counselor_name, counselor_credentials = counselor
-        today = datetime.today().strftime('%Y-%m-%d')
-        past_page = int(request.args.get('past_page', 1))
-        per_page = 10
+        # Handle attendance submission
+        if request.method == 'POST' and 'attendance' in request.form:
+            class_id = request.form['class_id']
+            present_ids = request.form.getlist('present')
+            absent_ids = request.form.getlist('absent')
 
-        # Today classes
-        logger.info(f"Fetching classes for counselor_id: {current_user.id}, date: {today}")
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date = %s",
-                  (current_user.id, today))
-        today_classes = c.fetchall()
+            # Clear previous attendance
+            c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
 
-        # Upcoming classes
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date BETWEEN %s AND %s",
-                  (current_user.id, (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d'), (datetime.today() + timedelta(days=7)).strftime('%Y-%m-%d')))
-        upcoming_classes = c.fetchall()
+            # Insert present
+            for attendee_id in present_ids:
+                c.execute("""
+                    INSERT INTO attendance (class_id, attendee_id, status)
+                    VALUES (%s, %s, 'present')
+                    ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'
+                """, (class_id, attendee_id))
 
-        # Past classes with pagination
-        count_query = "SELECT COUNT(*) FROM classes WHERE counselor_id = %s AND date < %s"
-        c.execute(count_query, (current_user.id, today))
-        total_past_classes = c.fetchone()[0]
-        total_past_pages = math.ceil(total_past_classes / per_page)
-        past_page = max(1, min(past_page, total_past_pages))  # Ensure page is within bounds
-        offset = (past_page - 1) * per_page
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked FROM classes WHERE counselor_id = %s AND date < %s ORDER BY date DESC LIMIT %s OFFSET %s",
-                  (current_user.id, today, per_page, offset))
-        past_classes = c.fetchall()
-        logger.info(f"Retrieved {len(past_classes)} past classes for counselor_id: {current_user.id}, page: {past_page}")
+            # Insert absent
+            for attendee_id in absent_ids:
+                c.execute("""
+                    INSERT INTO attendance (class_id, attendee_id, status)
+                    VALUES (%s, %s, 'absent')
+                    ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'absent'
+                """, (class_id, attendee_id))
 
-        for cls in today_classes + upcoming_classes + past_classes:
-            if None in cls:
-                logger.warning(f"Invalid class data: {cls}")
-        conn.close()
-        return render_template('counselor_dashboard.html', today_classes=today_classes, upcoming_classes=upcoming_classes, past_classes=past_classes,
-                               today=today, counselor_name=counselor_name, counselor_credentials=counselor_credentials,
-                               past_page=past_page, total_past_pages=total_past_pages)
+            conn.commit()
+            flash('Attendance saved successfully!', 'success')
+
+        # === Sorting Logic ===
+        if sort_by == 'date_desc':
+            order_clause = "ORDER BY c.date DESC, c.group_hours ASC"
+        elif sort_by == 'group':
+            order_clause = "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
+        else:  # date_asc (default)
+            order_clause = "ORDER BY c.date ASC, c.group_hours ASC"
+
+        # Count total
+        c.execute("""
+            SELECT COUNT(*) FROM classes 
+            WHERE counselor_id = %s AND (deleted_at IS NULL)
+        """, (current_user.id,))
+        total_classes = c.fetchone()[0]
+        total_pages = math.ceil(total_classes / per_page) if total_classes > 0 else 1
+
+        # Fetch classes with sorting + pagination
+        query = f"""
+            SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
+                   c.location, c.notes, c.recurring, c.frequency
+            FROM classes c
+            WHERE c.counselor_id = %s AND (c.deleted_at IS NULL)
+            {order_clause}
+            LIMIT %s OFFSET %s
+        """
+        c.execute(query, (current_user.id, per_page, offset))
+        classes = c.fetchall()
+
+        # Fetch attendees and current attendance status
+        class_attendees = {}
+        class_attendance = {}
+        for cls in classes:
+            class_id = cls[0]
+
+            # Assigned attendees
+            c.execute("""
+                SELECT a.id, a.full_name, a.attendee_id
+                FROM attendees a
+                JOIN class_attendees ca ON a.id = ca.attendee_id
+                WHERE ca.class_id = %s
+                ORDER BY a.full_name
+            """, (class_id,))
+            class_attendees[class_id] = c.fetchall()
+
+            # Current attendance
+            c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (class_id,))
+            attendance_records = c.fetchall()
+            class_attendance[class_id] = {str(row[0]): row[1] for row in attendance_records}
+
+        # Pagination URLs (preserve sort)
+        base_url = url_for('counselor_dashboard', sort_by=sort_by)
+        prev_page_url = f"{base_url}&page={page-1}" if page > 1 else None
+        next_page_url = f"{base_url}&page={page+1}" if page < total_pages else None
+
     except psycopg2.Error as e:
         logger.error(f"Database error in counselor_dashboard: {e}")
-        flash('Error loading dashboard. Please try again.', 'error')
-        conn.close()
-        return redirect(url_for('login'))
+        flash('Database error. Please try again.', 'error')
+        conn.rollback()
     except Exception as e:
         logger.error(f"Unexpected error in counselor_dashboard: {e}")
-        flash('An unexpected error occurred. Please try again.', 'error')
+        flash('An error occurred. Please try again.', 'error')
+    finally:
         conn.close()
-        return redirect(url_for('login'))
+
+    # This return is NOW in the correct place
+    return render_template(
+        'counselor_dashboard.html',
+        classes=classes,
+        class_attendees=class_attendees,
+        class_attendance=class_attendance,
+        sort_by=sort_by,
+        page=page,
+        total_pages=total_pages,
+        prev_page_url=prev_page_url,
+        next_page_url=next_page_url
+    )
 
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required

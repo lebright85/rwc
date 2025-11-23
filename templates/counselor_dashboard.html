@@ -1,69 +1,34 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-6xl mx-auto p-6">
-
-  <h1 class="text-3xl font-bold text-center mb-8">Counselor Dashboard</h1>
-
-  <!-- Sort -->
-  <div class="mb-8 text-center">
-    <form method="GET" class="inline">
-      <select name="sort_by" onchange="this.form.submit()"
-              class="px-6 py-3 border rounded-lg text-lg">
-        <option value="date_asc"  {% if sort_by == 'date_asc' %}selected{% endif %}>Earliest First</option>
-        <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Latest First</option>
-        <option value="group"     {% if sort_by == 'group' %}selected{% endif %}>Group Name</option>
-      </select>
-    </form>
-  </div>
+<div class="max-w-6xl mx-auto p-8">
+  <h1 class="text-4xl font-bold text-center mb-10 text-blue-800">Counselor Dashboard</h1>
 
   {% if classes %}
     {% for cls in classes %}
-      {% set cid = cls[0] %}
-      <div class="bg-white rounded-lg shadow p-6 mb-6 border-l-4 {% if cls[7] %}border-purple-500{% else %}border-blue-500{% endif %}">
-        <div class="flex justify-between items-start">
-          <div>
-            <h3 class="text-2xl font-bold">{{ cls[1] }}</h3>
-            <p><strong>Group:</strong> {{ cls[2] }}</p>
-            <p><strong>Date:</strong> {{ cls[3] }} | <strong>Time:</strong> {{ cls[4] }}</p>
-            <p><strong>Location:</strong> {{ cls[5] }}</p>
-            {% if cls[7] %}<span class="text-purple-600 font-semibold">Recurring ({{ cls[8] or 'weekly' }})</span>{% endif %}
-          </div>
-        </div>
+      <div class="bg-white rounded-xl shadow-lg p-8 mb-8 border-l-8 border-blue-600">
+        <h2 class="text-2xl font-bold text-gray-800">{{ cls[1] }}</h2>
+        <p class="text-lg mt-2"><strong>Group:</strong> {{ cls[2] }}</p>
+        <p class="text-lg"><strong>Date:</strong> {{ cls[3] }} | <strong>Time:</strong> {{ cls[4] }}</p>
+        <p class="text-lg"><strong>Location:</strong> {{ cls[5] }}</p>
 
-        <!-- Attendance -->
-        {% if class_attendees[cid] %}
-          <form method="POST" class="mt-4">
-            <input type="hidden" name="attendance" value="1">
-            <input type="hidden" name="class_id" value="{{ cid }}">
-            <div class="space-y-2">
-              {% for att in class_attendees[cid] %}
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" name="present" value="{{ att[0] }}"
-                         {% if class_attendance[cid].get(att[0]|string, 'present') == 'present' %}checked{% endif %}>
-                  <span>{{ att[1] }}</span>
-                </label>
+        {% if class_attendees[cls[0]] %}
+          <div class="mt-6">
+            <h3 class="font-semibold text-lg mb-3">Attendees:</h3>
+            <ul class="space-y-2">
+              {% for att in class_attendees[cls[0]] %}
+                <li class="flex items-center gap-3">
+                  <span class="text-xl">Check</span> {{ att[1] }}
+                </li>
               {% endfor %}
-            </div>
-            <button type="submit" class="mt-4 px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-              Save Attendance
-            </button>
-          </form>
+            </ul>
+          </div>
         {% else %}
-          <p class="text-orange-600 mt-4 italic">No attendees assigned</p>
+          <p class="text-orange-600 font-medium mt-4">No attendees assigned yet.</p>
         {% endif %}
       </div>
     {% endfor %}
-
-    <!-- Pagination -->
-    <div class="flex justify-center gap-8 mt-10 text-xl">
-      {% if prev_page_url %}<a href="{{ prev_page_url }}" class="text-blue-600 hover:underline">Previous</a>{% endif %}
-      <span>Page {{ page }} of {{ total_pages }}</span>
-      {% if next_page_url %}<a href="{{ next_page_url }}" class="text-blue-600 hover:underline">Next</a>{% endif %}
-    </div>
-
   {% else %}
     <p class="text-center text-2xl text-gray-500 mt-20">No classes found.</p>
   {% endif %}
-
 </div>
 {% endblock %}

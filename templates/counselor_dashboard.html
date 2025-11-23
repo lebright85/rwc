@@ -1,34 +1,91 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-6xl mx-auto p-8">
+<div class="max-w-7xl mx-auto p-6">
   <h1 class="text-4xl font-bold text-center mb-10 text-blue-800">Counselor Dashboard</h1>
 
-  {% if classes %}
-    {% for cls in classes %}
-      <div class="bg-white rounded-xl shadow-lg p-8 mb-8 border-l-8 border-blue-600">
-        <h2 class="text-2xl font-bold text-gray-800">{{ cls[1] }}</h2>
-        <p class="text-lg mt-2"><strong>Group:</strong> {{ cls[2] }}</p>
-        <p class="text-lg"><strong>Date:</strong> {{ cls[3] }} | <strong>Time:</strong> {{ cls[4] }}</p>
-        <p class="text-lg"><strong>Location:</strong> {{ cls[5] }}</p>
-
-        {% if class_attendees[cls[0]] %}
-          <div class="mt-6">
-            <h3 class="font-semibold text-lg mb-3">Attendees:</h3>
-            <ul class="space-y-2">
-              {% for att in class_attendees[cls[0]] %}
-                <li class="flex items-center gap-3">
-                  <span class="text-xl">Check</span> {{ att[1] }}
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-        {% else %}
-          <p class="text-orange-600 font-medium mt-4">No attendees assigned yet.</p>
-        {% endif %}
+  <!-- Sort Bar -->
+  <div class="bg-white rounded-2xl shadow-xl p-6 mb-10">
+    <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+      <div class="flex items-center gap-6">
+        <span class="text-lg font-semibold text-gray-700">Sort by:</span>
+        <select onchange="location = this.value" class="text-lg px-6 py-3 border-2 border-blue-200 rounded-xl focus:border-blue-500 focus:outline-none">
+          <option value="{{ url_for('counselor_dashboard', sort_by='date_asc', page=1) }}" {% if sort_by == 'date_asc' %}selected{% endif %}>
+            Date (Earliest First)
+          </option>
+          <option value="{{ url_for('counselor_dashboard', sort_by='date_desc', page=1) }}" {% if sort_by == 'date_desc' %}selected{% endif %}>
+            Date (Latest First)
+          </option>
+          <option value="{{ url_for('counselor_dashboard', sort_by='group', page=1) }}" {% if sort_by == 'group' %}selected{% endif %}>
+            Group Name
+          </option>
+        </select>
       </div>
-    {% endfor %}
+      <p class="text-lg text-gray-600">
+        Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+      </p>
+    </div>
+  </div>
+
+  <!-- Classes -->
+  {% if classes %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+      {% for cls in classes %}
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden border-l-8 {% if cls[6] %}border-purple-600{% else %}border-blue-600{% endif %}">
+          <div class="p-8">
+            <div class="flex justify-between items-start mb-4">
+              <h2 class="text-2xl font-bold text-gray-800">{{ cls[1] }}</h2>
+              {% if cls[6] %}
+                <span class="bg-purple-100 text-purple-700 px-4 py-2 rounded-full text-sm font-bold">Recurring</span>
+              {% endif %}
+            </div>
+            <div class="space-y-2 text-gray-700 mb-6">
+              <p><strong>Group:</strong> {{ cls[2] }}</p>
+              <p><strong>Date:</strong> {{ cls[3] }}</p>
+              <p><strong>Time:</strong> {{ cls[4] }}</p>
+              <p><strong>Location:</strong> {{ cls[5] }}</p>
+            </div>
+
+            {% if class_attendees[cls[0]] %}
+              <form method="POST" class="space-y-3">
+                <input type="hidden" name="attendance" value="1">
+                <input type="hidden" name="class_id" value="{{ cls[0] }}">
+                {% for att in class_attendees[cls[0]] %}
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="present" value="{{ att[0] }}"
+                           {% if class_attendance[cls[0]].get(att[0]|string, 'present') == 'present' %}checked{% endif %}
+                           class="w-6 h-6 text-green-600 rounded focus:ring-green-500">
+                    <span class="text-lg {% if class_attendance[cls[0]].get(att[0]|string) == 'absent' %}line-through text-gray-400{% else %}text-gray-800{% endif %}">
+                      {{ att[1] }}
+                    </span>
+                  </label>
+                {% endfor %}
+                <button type="submit" class="w-full mt-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-xl hover:from-green-700 hover:to-green-800 transition text-lg">
+                  Save Attendance
+                </button>
+              </form>
+            {% else %}
+              <p class="text-orange-600 font-medium text-center py-8">No attendees assigned</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-center gap-8 mt-12 text-xl font-bold">
+      {% if prev_page_url %}
+        <a href="{{ prev_page_url }}" class="text-blue-600 hover:text-blue-800">Previous</a>
+      {% endif %}
+      <span class="text-gray-600">Page {{ page }} / {{ total_pages }}</span>
+      {% if next_page_url %}
+        <a href="{{ next_page_url }}" class="text-blue-600 hover:text-blue-800">Next</a>
+      {% endif %}
+    </div>
+
   {% else %}
-    <p class="text-center text-2xl text-gray-500 mt-20">No classes found.</p>
+    <div class="text-center py-32">
+      <p class="text-3xl text-gray-500 font-light">No classes found</p>
+    </div>
   {% endif %}
 </div>
 {% endblock %}

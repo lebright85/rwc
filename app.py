@@ -1378,13 +1378,49 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/counselor_dashboard')
+@app.route('/counselor_dashboard', methods=['GET', 'POST'])
 @login_required
 def counselor_dashboard():
     if current_user.role != 'counselor':
         return redirect(url_for('login'))
-    
-    return "<h1>COUNSELOR DASHBOARD WORKS!</h1><p>If you see this, the route and login are 100% fine.</p>"
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Super simple query — only what we need
+        c.execute("""
+            SELECT id, class_name, group_name, date, group_hours, 
+                   COALESCE(location, 'Not specified')
+            FROM classes 
+            WHERE counselor_id = %s AND (deleted_at IS NULL)
+            ORDER BY date ASC, group_hours ASC
+        """, (current_user.id,))
+        classes = c.fetchall()
+
+        # Load attendees for each class
+        class_attendees = {}
+        for cls in classes:
+            class_id = cls[0]
+            c.execute("""
+                SELECT a.id, a.full_name 
+                FROM attendees a
+                JOIN class_attendees ca ON a.id = ca.attendee_id
+                WHERE ca.class_id = %s
+                ORDER BY a.full_name
+            """, (class_id,))
+            class_attendees[class_id] = c.fetchall()
+
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}", exc_info=True)
+        classes = []
+        class_attendees = {}
+    finally:
+        conn.close()
+
+    return render_template('counselor_dashboard.html',
+                           classes=classes,
+                           class_attendees=class_attendees)
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])
 @login_required
 def class_attendance(class_id):

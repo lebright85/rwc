@@ -1377,6 +1377,9 @@ def manage_attendees():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+import math                  # ← THIS WAS MISSING BEFORE
+# ... your other imports ...
+
 @app.route('/counselor_dashboard', methods=['GET', 'POST'])
 @login_required
 def counselor_dashboard():
@@ -1384,86 +1387,74 @@ def counselor_dashboard():
         flash('Access denied.', 'error')
         return redirect(url_for('login'))
 
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    # === Parameters ===
-    sort_by = request.args.get('sort_by', 'date_asc')  # date_asc (default), date_desc, group
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = 15
-    offset = (page - 1) * per_page
-
-    # Default values in case of error
+    # Default values (prevents "UnboundLocalError")
     classes = []
     class_attendees = {}
     class_attendance = {}
     total_pages = 1
     prev_page_url = next_page_url = None
+    sort_by = request.args.get('sort_by', 'date_asc')
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 15
+    offset = (page - 1) * per_page
+
+    conn = get_db_connection()
+    c = conn.cursor()
 
     try:
-        # Handle attendance submission
+        # ——— Attendance submission ———
         if request.method == 'POST' and 'attendance' in request.form:
             class_id = request.form['class_id']
             present_ids = request.form.getlist('present')
             absent_ids = request.form.getlist('absent')
 
-            # Clear previous attendance
             c.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-
-            # Insert present
-            for attendee_id in present_ids:
+            for aid in present_ids:
                 c.execute("""
                     INSERT INTO attendance (class_id, attendee_id, status)
                     VALUES (%s, %s, 'present')
                     ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'present'
-                """, (class_id, attendee_id))
-
-            # Insert absent
-            for attendee_id in absent_ids:
+                """, (class_id, aid))
+            for aid in absent_ids:
                 c.execute("""
                     INSERT INTO attendance (class_id, attendee_id, status)
                     VALUES (%s, %s, 'absent')
                     ON CONFLICT (class_id, attendee_id) DO UPDATE SET status = 'absent'
-                """, (class_id, attendee_id))
-
+                """, (class_id, aid))
             conn.commit()
             flash('Attendance saved successfully!', 'success')
 
-        # === Sorting Logic ===
-        if sort_by == 'date_desc':
-            order_clause = "ORDER BY c.date DESC, c.group_hours ASC"
-        elif sort_by == 'group':
-            order_clause = "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC"
-        else:  # date_asc (default)
-            order_clause = "ORDER BY c.date ASC, c.group_hours ASC"
+        # ——— Sorting ———
+        order_clause = {
+            'date_desc': "ORDER BY c.date DESC, c.group_hours ASC",
+            'group':     "ORDER BY c.group_name ASC, c.date ASC, c.group_hours ASC",
+        }.get(sort_by, "ORDER BY c.date ASC, c.group_hours ASC")   # default = oldest first
 
-        # Count total
+        # ——— Count total ———
         c.execute("""
             SELECT COUNT(*) FROM classes 
             WHERE counselor_id = %s AND (deleted_at IS NULL)
         """, (current_user.id,))
         total_classes = c.fetchone()[0]
-        total_pages = math.ceil(total_classes / per_page) if total_classes > 0 else 1
+        total_pages = math.ceil(total_classes / per_page) if total_classes else 1
 
-        # Fetch classes with sorting + pagination
-        query = f"""
+        # ——— Fetch classes ———
+        c.execute(f"""
             SELECT c.id, c.class_name, c.group_name, c.date, c.group_hours,
                    c.location, c.notes, c.recurring, c.frequency
             FROM classes c
             WHERE c.counselor_id = %s AND (c.deleted_at IS NULL)
             {order_clause}
             LIMIT %s OFFSET %s
-        """
-        c.execute(query, (current_user.id, per_page, offset))
+        """, (current_user.id, per_page, offset))
         classes = c.fetchall()
 
-        # Fetch attendees and current attendance status
+        # ——— Attendees & existing attendance ———
         class_attendees = {}
         class_attendance = {}
         for cls in classes:
             class_id = cls[0]
 
-            # Assigned attendees
             c.execute("""
                 SELECT a.id, a.full_name, a.attendee_id
                 FROM attendees a
@@ -1473,27 +1464,21 @@ def counselor_dashboard():
             """, (class_id,))
             class_attendees[class_id] = c.fetchall()
 
-            # Current attendance
             c.execute("SELECT attendee_id, status FROM attendance WHERE class_id = %s", (class_id,))
-            attendance_records = c.fetchall()
-            class_attendance[class_id] = {str(row[0]): row[1] for row in attendance_records}
+            class_attendance[class_id] = {str(row[0]): row[1] for row in c.fetchall()}
 
-        # Pagination URLs (preserve sort)
-        base_url = url_for('counselor_dashboard', sort_by=sort_by)
-        prev_page_url = f"{base_url}&page={page-1}" if page > 1 else None
-        next_page_url = f"{base_url}&page={page+1}" if page < total_pages else None
+        # ——— Pagination links (preserve sort) ———
+        base = url_for('counselor_dashboard', sort_by=sort_by)
+        prev_page_url = f"{base}&page={page-1}" if page > 1 else None
+        next_page_url = f"{base}&page={page+1}" if page < total_pages else None
 
-    except psycopg2.Error as e:
-        logger.error(f"Database error in counselor_dashboard: {e}")
-        flash('Database error. Please try again.', 'error')
-        conn.rollback()
     except Exception as e:
-        logger.error(f"Unexpected error in counselor_dashboard: {e}")
-        flash('An error occurred. Please try again.', 'error')
+        logger.error(f"counselor_dashboard error: {e}", exc_info=True)
+        flash('An error occurred loading your dashboard.', 'error')
+
     finally:
         conn.close()
 
-    # This return is NOW in the correct place
     return render_template(
         'counselor_dashboard.html',
         classes=classes,
@@ -1503,7 +1488,7 @@ def counselor_dashboard():
         page=page,
         total_pages=total_pages,
         prev_page_url=prev_page_url,
-        next_page_url=next_page_url
+        next_page_url=next_page_url,
     )
 
 @app.route('/class_attendance/<int:class_id>', methods=['GET', 'POST'])

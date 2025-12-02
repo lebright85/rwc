@@ -3,23 +3,59 @@
 <div class="max-w-4xl mx-auto">
     <h1 class="text-2xl font-bold mb-6">Admin Dashboard</h1>
 
-    <h2 class="text-lg font-bold mb-4">Today's Classes ({{ today }})</h2>
-    {% for class in today_classes %}
-    <div class="border-b py-4 last:border-b-0">
-        <h3 class="text-md font-bold">
-            Class: {{ class[2] }} (Group {{ class[1] }}, {{ class[3] }}, {{ class[4] }}, {{ class[5] }})
-        </h3>
+    <!-- Weekly Grid View -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-lg font-bold mb-4">Weekly Class Schedule</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white border">
+                <thead>
+                    <tr>
+                        {% for day in weekly_days %}
+                        <th class="border px-4 py-2 text-sm font-medium">{{ day }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        {% for day in weekly_classes %}
+                        <td class="border px-4 py-2 align-top">
+                            {% if day %}
+                            <div class="grid grid-cols-1 gap-2">
+                                {% for class in day %}
+                                <div class="border p-2 rounded-lg">
+                                    <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
+                                    <p class="text-sm">Date: {{ class[3] }} | Time: {{ class[4] }} | Location: {{ class[5] }}</p>
+                                    <p class="text-sm">Counselor: {{ class[6] }}</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-sm text-gray-500">No classes</p>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-    {% else %}
-    <p class="text-sm text-gray-500">No classes scheduled for today.</p>
-    {% endfor %}
 
-    <div class="mt-6">
-        <a href="{{ url_for('manage_classes') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Classes</a>
-        <a href="{{ url_for('manage_attendees') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Attendees</a>
-        <a href="{{ url_for('manage_groups') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Groups</a>
-        <a href="{{ url_for('manage_users') }}" class="bg-blue-600 text-white p-2 rounded mr-2 text-sm">Manage Users</a>
-        <a href="{{ url_for('reports') }}" class="bg-blue-600 text-white p-2 rounded text-sm">Reports</a>
+    <!-- Today's Classes -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-lg font-bold mb-4">Today's Classes ({{ today }})</h3>
+        {% if today_classes %}
+        <div class="grid grid-cols-1 gap-4">
+            {% for class in today_classes %}
+            <div class="border p-4 rounded-lg">
+                <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
+                <p class="text-sm">Time: {{ class[4] }} | Location: {{ class[5] }}{% if class[6] %} | Locked{% endif %}</p>
+                <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="text-blue-600 hover:underline text-sm">Manage Attendance</a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No classes scheduled for today.</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

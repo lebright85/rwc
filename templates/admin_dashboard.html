@@ -1,61 +1,67 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold mb-6">Admin Dashboard</h1>
-
-    <!-- Weekly Grid View -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 class="text-lg font-bold mb-4">Weekly Class Schedule</h2>
-        <div class="overflow-x-auto">
-            <table class="min-w-full bg-white border">
-                <thead>
-                    <tr>
-                        {% for day in weekly_days %}
-                        <th class="border px-4 py-2 text-sm font-medium">{{ day }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        {% for day in weekly_classes %}
-                        <td class="border px-4 py-2 align-top">
-                            {% if day %}
-                            <div class="grid grid-cols-1 gap-2">
-                                {% for class in day %}
-                                <div class="border p-2 rounded-lg">
-                                    <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
-                                    <p class="text-sm">Date: {{ class[3] }} | Time: {{ class[4] }} | Location: {{ class[5] }}</p>
-                                    <p class="text-sm">Counselor: {{ class[6] }}</p>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <p class="text-sm text-gray-500">No classes</p>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+<div class="max-w-6xl mx-auto p-4">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
+        <a href="{{ url_for('manage_classes') }}" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 shadow-md">
+            Manage Classes
+        </a>
     </div>
 
-    <!-- Today's Classes -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h3 class="text-lg font-bold mb-4">Today's Classes ({{ today }})</h3>
-        {% if today_classes %}
-        <div class="grid grid-cols-1 gap-4">
-            {% for class in today_classes %}
-            <div class="border p-4 rounded-lg">
-                <h4 class="text-md font-bold">{{ class[2] }} (Group {{ class[1] }})</h4>
-                <p class="text-sm">Time: {{ class[4] }} | Location: {{ class[5] }}{% if class[6] %} | Locked{% endif %}</p>
-                <a href="{{ url_for('class_attendance', class_id=class[0]) }}" class="text-blue-600 hover:underline text-sm">Manage Attendance</a>
+    <!-- Sort Controls -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700">All Classes</h2>
+        <form method="GET" class="flex items-center space-x-4">
+            <label class="font-medium text-gray-600">Sort by:</label>
+            <select name="sort_by" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>Date (Earliest First)</option>
+                <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Date (Latest First)</option>
+                <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group Name</option>
+            </select>
+        </form>
+    </div>
+
+    <!-- Classes List -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        {% if classes %}
+        <div class="space-y-4">
+            {% for class in classes %}
+            <div class="border-l-4 {% if class.locked %}border-red-500{% else %}border-blue-500{% endif %} pl-6 pr-4 py-4 hover:bg-gray-50 transition">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-bold text-gray-800">
+                            {{ class.class_name }} 
+                            <span class="text-sm font-normal text-gray-600">(Group {{ class.group_name }})</span>
+                        </h3>
+                        <div class="mt-1 text-sm text-gray-600 space-y-1">
+                            <p><strong>Date:</strong> {{ class.date }}</p>
+                            <p><strong>Time:</strong> {{ class.group_hours }}</p>
+                            <p><strong>Counselor:</strong> {{ class.counselor_name or 'Unassigned' }}</p>
+                            <p><strong>Location:</strong> {{ class.location or 'Not specified' }}</p>
+                            {% if class.recurring == 1 %}
+                            <p class="text-green-600 font-medium">Recurring Weekly</p>
+                            {% endif %}
+                            {% if class.locked %}
+                            <p class="text-red-600 font-medium">Locked</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <a href="{{ url_for('manage_classes') }}#class_{{ class.id }}" class="text-blue-600 hover:underline text-sm font-medium">
+                            Edit / Delete →
+                        </a>
+                    </div>
+                </div>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-sm text-gray-500">No classes scheduled for today.</p>
+        <p class="text-center text-gray-500 py-12">No classes found.</p>
         {% endif %}
+    </div>
+
+    <div class="mt-8 text-center text-sm text-gray-500">
+        Use the sort dropdown above to view classes chronologically and easily spot duplicates or gaps.
     </div>
 </div>
 {% endblock %}

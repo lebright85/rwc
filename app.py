@@ -336,33 +336,39 @@ def login():
 def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
+    
     conn = get_db_connection()
     c = conn.cursor()
-    today = datetime.today()
-    today_str = today.strftime('%Y-%m-%d')
-
-    # Today's classes
+    
+    sort_by = request.args.get('sort_by', 'date_asc')
+    
+    query = """
+        SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location,
+               u.full_name AS counselor_name, c.recurring, c.locked
+        FROM classes c
+        LEFT JOIN users u ON c.counselor_id = u.id
+        WHERE c.deleted_at IS NULL
+    """
+    
+    if sort_by == 'date_asc':
+        query += " ORDER BY c.date ASC, c.group_hours ASC"
+    elif sort_by == 'date_desc':
+        query += " ORDER BY c.date DESC, c.group_hours DESC"
+    elif sort_by == 'group':
+        query += " ORDER BY c.group_name ASC, c.date ASC"
+    
     try:
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked, (SELECT full_name FROM users WHERE id = counselor_id) FROM classes WHERE date = %s ORDER BY group_name, group_hours",
-                  (today_str,))
-        today_classes = c.fetchall()
-    except psycopg2.Error as e:
-        logger.error(f"Database error in admin_dashboard: {e}")
-        flash('Error loading dashboard. Please try again.', 'error')
-        today_classes = []
-
-    # Weekly classes
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-    weekly_days = [(start_of_week + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
-    weekly_classes = {}
-    for day in weekly_days:
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked, (SELECT full_name FROM users WHERE id = counselor_id) FROM classes WHERE date = %s ORDER BY group_hours",
-                  (day,))
-        weekly_classes[day] = c.fetchall()
-
-    conn.close()
-    return render_template('admin_dashboard.html', today_classes=today_classes, today=today_str, weekly_classes=weekly_classes.values(), weekly_days=weekly_days)
+        c.execute(query)
+        classes = c.fetchall()
+    except Exception as e:
+        logger.error(f"Error loading admin dashboard: {e}")
+        classes = []
+    finally:
+        conn.close()
+    
+    return render_template('admin_dashboard.html', 
+                         classes=classes, 
+                         sort_by=sort_by)
 
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

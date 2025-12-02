@@ -44,6 +44,17 @@
     <!-- Past Classes -->
     <div class="bg-white p-6 rounded-lg shadow-md">
         <h3 class="text-lg font-bold mb-4">Past Classes</h3>
+        <div class="mb-4">
+            <form method="GET">
+                <label class="block text-sm font-medium">Sort By</label>
+                <select name="sort_by" class="w-full border rounded p-2 text-sm mb-2">
+                    <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>Date (Earliest to Latest)</option>
+                    <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Date (Latest to Earliest)</option>
+                    <option value="group" {% if sort_by == 'group' %}selected{% endif %}>Group</option>
+                </select>
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded text-sm">Sort</button>
+            </form>
+        </div>
         {% if past_classes %}
         <div class="grid grid-cols-1 gap-4">
             {% for class in past_classes %}
@@ -57,13 +68,13 @@
         <!-- Pagination Controls -->
         <div class="mt-6 flex justify-center items-center space-x-2">
             {% if past_page > 1 %}
-            <a href="{{ url_for('counselor_dashboard', past_page=past_page-1) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
+            <a href="{{ url_for('counselor_dashboard', past_page=past_page-1, sort_by=sort_by) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Previous</a>
             {% endif %}
             {% for p in range(1, total_past_pages + 1) %}
-            <a href="{{ url_for('counselor_dashboard', past_page=p) }}" class="p-2 rounded text-sm {% if p == past_page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
+            <a href="{{ url_for('counselor_dashboard', past_page=p, sort_by=sort_by) }}" class="p-2 rounded text-sm {% if p == past_page %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">{{ p }}</a>
             {% endfor %}
             {% if past_page < total_past_pages %}
-            <a href="{{ url_for('counselor_dashboard', past_page=past_page+1) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
+            <a href="{{ url_for('counselor_dashboard', past_page=past_page+1, sort_by=sort_by) }}" class="bg-blue-600 text-white p-2 rounded text-sm">Next</a>
             {% endif %}
         </div>
         {% else %}

@@ -338,52 +338,31 @@ def admin_dashboard():
         return redirect(url_for('login'))
     conn = get_db_connection()
     c = conn.cursor()
-    today = datetime.today().strftime('%Y-%m-%d')
+    today = datetime.today()
+    today_str = today.strftime('%Y-%m-%d')
+
+    # Today's classes
     try:
-        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s ORDER BY group_name, group_hours",
-                  (today,))
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked, (SELECT full_name FROM users WHERE id = counselor_id) FROM classes WHERE date = %s ORDER BY group_name, group_hours",
+                  (today_str,))
         today_classes = c.fetchall()
     except psycopg2.Error as e:
         logger.error(f"Database error in admin_dashboard: {e}")
         flash('Error loading dashboard. Please try again.', 'error')
         today_classes = []
-    finally:
-        conn.close()
-    return render_template('admin_dashboard.html', today_classes=today_classes, today=today)
 
-@app.route('/attendee_profile/<int:attendee_id>')
-@login_required
-def attendee_profile(attendee_id):
-    if current_user.role != 'admin':
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    try:
-        c.execute("SELECT id, full_name, attendee_id, group_details, notes FROM attendees WHERE id = %s",
-                  (attendee_id,))
-        attendee = c.fetchone()
-        if not attendee:
-            flash('Attendee not found')
-            return redirect(url_for('manage_attendees'))
-        c.execute("SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location FROM classes c JOIN class_attendees ca ON c.id = ca.class_id WHERE ca.attendee_id = %s",
-                  (attendee_id,))
-        assigned_classes = c.fetchall()
-        c.execute("SELECT c.class_name, a.time_in, a.time_out, a.attendance_status, a.notes, a.location FROM attendance a JOIN classes c ON a.class_id = c.id WHERE a.attendee_id = %s",
-                  (attendee_id,))
-        attendance_records = c.fetchall()
-        c.execute("""
-            SELECT string_agg(g.name, ', ') FROM groups g
-            JOIN attendee_groups ag ON g.id = ag.group_id
-            WHERE ag.attendee_id = %s
-        """, (attendee_id,))
-        groups_str = c.fetchone()[0] or 'N/A'
-    except psycopg2.Error as e:
-        logger.error(f"Database error in attendee_profile: {e}")
-        flash('Error loading attendee profile. Please try again.', 'error')
-        return redirect(url_for('manage_attendees'))
-    finally:
-        conn.close()
-    return render_template('attendee_profile.html', attendee=attendee, assigned_classes=assigned_classes, attendance_records=attendance_records, groups_str=groups_str)
+    # Weekly classes
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+    weekly_days = [(start_of_week + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+    weekly_classes = {}
+    for day in weekly_days:
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location, locked, (SELECT full_name FROM users WHERE id = counselor_id) FROM classes WHERE date = %s ORDER BY group_hours",
+                  (day,))
+        weekly_classes[day] = c.fetchall()
+
+    conn.close()
+    return render_template('admin_dashboard.html', today_classes=today_classes, today=today_str, weekly_classes=weekly_classes.values(), weekly_days=weekly_days)
 
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

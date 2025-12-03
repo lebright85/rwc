@@ -344,59 +344,62 @@ def admin_dashboard():
     week_end = (monday + timedelta(days=4)).date()
 
     conn = get_db_connection()
+    c = conn.cursor()
+
     try:
-        c = conn.cursor()
+        # 1. Get counselors — 100% safe
+        c.execute("""
+            SELECT id, COALESCE(full_name, username, 'Counselor') 
+            FROM users WHERE role = 'counselor' 
+            ORDER BY COALESCE(full_name, username)
+        """)
+        counselors = [{'id': r[0], 'full_name': r[1]} for r in c.fetchall()]
 
-        # FIXED PART STARTS HERE
-        c.execute("SELECT id, COALESCE(full_name, username, 'Unknown'), COALESCE(credentials, '') FROM users WHERE role = 'counselor'")
-        counselors = []
-        for row in c.fetchall():
-            counselors.append({
-                'id': row[0],
-                'full_name': row[1] if row[1] else "Counselor",
-                'credentials': row[2]
-            })
+        # 2. Pre-build empty schedule — this can NEVER fail
+        schedule = {c['id']: {day: [] for day in ['monday','tuesday','wednesday','thursday','friday']} 
+                    for c in counselors}
 
-        # Build empty schedule first — this can NEVER crash
-        schedule = {}
-        for counselor in counselors:
-            schedule[counselor['id']] = {
-                'monday': [], 'tuesday': [], 'wednesday': [], 'thursday': [], 'friday': []
-            }
+        # 3. Only pull classes with valid-looking dates
+        c.execute("""
+            SELECT counselor_id, class_name, group_name, date, group_hours, location 
+            FROM classes 
+            WHERE (deleted_at IS NULL OR deleted_at = '')
+              AND date IS NOT NULL 
+              AND date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        """)
 
-        # Now safely add classes
-        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE deleted_at IS NULL OR deleted_at = ''")
-        day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
+        day_map = {0:'monday',1:'tuesday',2:'wednesday',3:'thursday',4:'friday'}
 
-        for row in c.fetchall():
-            cid, cname, gname, dstr, hours, loc = row
-            if not dstr or not dstr.strip():
-                continue
+        for cid, class_name, group_name, date_str, hours, loc in c.fetchall():
             try:
-                cdate = datetime.strptime(dstr.split(' ')[0], '%Y-%m-%d').date()
-            except:
-                continue
-            if not (week_start <= cdate <= week_end) or cdate.weekday() > 4:
-                continue
+                # Ultra-defensive parsing
+                date_part = date_str.strip().split(' ')[0]
+                class_date = datetime.strptime(date_part, '%Y-%m-%d').date()
 
-            day = day_map[cdate.weekday()]
-            time = hours.split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
+                if not (week_start <= class_date <= week_end):
+                    continue
+                if class_date.weekday() > 4:
+                    continue
 
-            if cid in schedule:
+                day = day_map[class_date.weekday()]
+                time = (hours or "").split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
+
+                if cid not in schedule:
+                    continue
+
                 schedule[cid][day].append({
-                    'class_name': cname or "Class",
-                    'group_name': gname or "",
+                    'class_name': class_name or "Class",
+                    'group_name': group_name or "",
                     'time': time,
                     'location': loc or ""
                 })
+            except Exception:
+                # Skip garbage rows silently — no crash
+                continue
 
-        dates = {
-            'monday': monday.strftime('%m/%d'),
-            'tuesday': (monday + timedelta(1)).strftime('%m/%d'),
-            'wednesday': (monday + timedelta(2)).strftime('%m/%d'),
-            'thursday': (monday + timedelta(3)).strftime('%m/%d'),
-            'friday': (monday + timedelta(4)).strftime('%m/%d'),
-        }
+        # Pretty date headers
+        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') 
+                 for i in range(5)}
 
         return render_template('admin_dashboard.html',
                                counselors=counselors,
@@ -407,9 +410,11 @@ def admin_dashboard():
                                week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"ADMIN DASHBOARD FINAL ERROR: {e}", exc_info=True)
-        flash("Still loading… one second.", "info")
-        return render_template('admin_dashboard.html', counselors=[], schedule={}, dates={}, week_start=today.date(), week_end=today.date(), week_offset=0)
+        logger.error(f"Admin dashboard crashed: {e}", exc_info=True)
+        flash("Dashboard had an issue — showing empty week. Data may be corrupted.", "danger")
+        return render_template('admin_dashboard.html',
+                               counselors=[], schedule={}, dates={}, 
+                               week_start=today.date(), week_end=today.date(), week_offset=0)
     finally:
         conn.close()
         

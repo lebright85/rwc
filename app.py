@@ -348,13 +348,18 @@ def admin_dashboard():
 
     try:
         # 1. Get counselors — 100% safe
-        c.execute("""
-            SELECT id, COALESCE(full_name, username, 'Counselor') 
-            FROM users WHERE role = 'counselor' 
-            ORDER BY COALESCE(full_name, username)
-        """)
-        counselors = [{'id': r[0], 'full_name': r[1]} for r in c.fetchall()]
-
+       c.execute("""
+    SELECT id, 
+           COALESCE(full_name, username, 'Counselor'),
+           COALESCE(credentials, '')
+    FROM users 
+    WHERE role = 'counselor' 
+    ORDER BY COALESCE(full_name, username)
+""")
+counselors = [
+    {'id': r[0], 'full_name': r[1], 'credentials': r[2].strip() if r[2] else ''}
+    for r in c.fetchall()
+]
         # 2. Pre-build empty schedule — this can NEVER fail
         schedule = {c['id']: {day: [] for day in ['monday','tuesday','wednesday','thursday','friday']} 
                     for c in counselors}

@@ -347,67 +347,69 @@ def admin_dashboard():
     c = conn.cursor()
 
     try:
-        # 1. Get all counselors safely
+        # 1. Get counselors (this never fails)
         c.execute("""
-            SELECT id,
-                   COALESCE(full_name, username, 'Counselor'),
-                   COALESCE(credentials, '')
-            FROM users
-            WHERE role = 'counselor'
-            ORDER BY COALESCE(full_name, username)
+            SELECT id, COALESCE(full_name, username, 'Counselor'), COALESCE(credentials, '')
+            FROM users WHERE role = 'counselor' ORDER BY full_name, username
         """)
         counselors = [
-            {'id': row[0], 'full_name': row[1], 'credentials': row[2].strip() if row[2] else ''}
-            for row in c.fetchall()
+            {'id': r[0], 'full_name': r[1], 'credentials': r[2].strip() if r[2] else ''}
+            for r in c.fetchall()
         ]
 
-        # 2. Build empty schedule first (prevents KeyError)
+        # 2. Empty schedule — always exists
         schedule = {
-            counselor['id']: {
-                'monday': [], 'tuesday': [], 'wednesday': [], 'thursday': [], 'friday': []
-            }
-            for counselor in counselors
+            couns['id']: {day: [] for day in ['monday','tuesday','wednesday','thursday','friday']}
+            for couns in counselors
         }
 
-        # 3. Only pull classes with valid YYYY-MM-DD dates
-        c.execute("""
-            SELECT counselor_id, class_name, group_name, date, group_hours, location
-            FROM classes
-            WHERE date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND counselor_id IS NOT NULL
-        """)
-
+        # 3. SUPER DEFENSIVE date parsing — accepts ANYTHING
+        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes")
         day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
 
-        for cid, class_name, group_name, date_str, hours, loc in c.fetchall():
+        for row in c.fetchall():
+            cid, class_name, group_name, date_raw, hours, loc = row
+            if not cid or cid not in schedule:
+                continue
+
+            # Extract first 10 characters that look like YYYY-MM-DD
+            date_str = str(date_raw or "")[:10]
+            if not date_str or not date_str[0:4].isdigit() or date_str[4] != '-' or date_str[7] != '-':
+                continue
+
             try:
-                class_date = datetime.strptime(date_str.strip()[:10], '%Y-%m-%d').date()
-                if not (week_start <= class_date <= week_end):
-                    continue
-                if class_date.weekday() > 4:
-                    continue
+                class_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except:
+                continue  # skip unparseable dates
 
-                day = day_map[class_date.weekday()]
-                start_time = hours.split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
-                location = (loc or "").strip()
+            if not (week_start <= class_date <= week_end):
+                continue
+            if class_date.weekday() > 4:
+                continue
 
-                if cid in schedule:
-                    schedule[cid][day].append({
-                        'class_name': class_name or "Class",
-                        'group_name': group_name or "",
-                        'time': start_time,
-                        'location': location
-                    })
-                    schedule[cid][day].sort(key=lambda x: x['time'])
+            day = day_map[class_date.weekday()]
+            start_time = "TBD"
+            if hours and '-' in str(hours):
+                start_time = str(hours).split('-')[0].strip()
+            elif hours:
+                start_time = str(hours).strip()
 
-            except Exception:
-                continue  # skip any bad row silently
+            schedule[cid][day].append({
+                'class_name': str(class_name or "Class"),
+                'group_name': str(group_name or ""),
+                'time': start_time,
+                'location': str(loc or "").strip()
+            })
 
-        # Date headers for the table
-        dates = {
-            (monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A')
-            for i in range(5)
-        }
+        # Sort every day's classes by time
+        for cid in schedule:
+            for day in schedule[cid]:
+                schedule[cid][day].sort(key=lambda x: x['time'])
 
+        # Header dates
+        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
+
+        conn.close()
         return render_template('admin_dashboard.html',
                                counselors=counselors,
                                schedule=schedule,
@@ -417,15 +419,12 @@ def admin_dashboard():
                                week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"Admin dashboard crashed: {e}", exc_info=True)
-        flash("Dashboard had an issue — showing empty schedule.", "danger")
-        return render_template('admin_dashboard.html',
-                               counselors=[], schedule={}, dates={},
-                               week_start=today.date(), week_end=today.date(),
-                               week_offset=week_offset)
-
-    finally:
+        logger.error(f"Admin dashboard failed: {e}", exc_info=True)
         conn.close()
+        flash("Dashboard loaded with empty schedule — some data may be corrupted.", "warning")
+        return render_template('admin_dashboard.html',
+                               counselors=[], schedule={}, dates={}, week_start=today.date(),
+                               week_end=today.date(), week_offset=week_offset)
         
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

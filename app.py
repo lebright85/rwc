@@ -335,55 +335,31 @@ def login():
 @login_required
 def admin_dashboard():
     if current_user.role != 'admin':
+        logger.warning(f"Unauthorized access to admin_dashboard by {current_user.username} (role: {current_user.role})")
         return redirect(url_for('login'))
-
-    week_offset = int(request.args.get('week_offset', 0))
-    today = datetime.today()
-    start_of_week = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
-    week_start = start_of_week
-    week_end = start_of_week + timedelta(days=4)  # Friday
-
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    c.execute("SELECT id, full_name, credentials FROM users WHERE role = 'counselor' ORDER BY full_name")
-    counselors = [dict(id=row[0], full_name=row[1] or row[1], credentials=row[2]) for row in c.fetchall()]
-
-    c.execute("""
-        SELECT c.counselor_id, c.class_name, c.group_name, c.date, c.group_hours, c.location
-        FROM classes c
-        WHERE c.date BETWEEN %s AND %s AND (c.deleted_at IS NULL)
-        ORDER BY c.counselor_id, c.date, c.group_hours
-    """, (week_start.date(), (week_end + timedelta(days=1)).date()))
-    raw_classes = c.fetchall()
-
-    schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} for c in counselors}
-    day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
-
-    for cls in raw_classes:
-        cid, name, group, date, hours, loc = cls
-        if date.weekday() < 5:
-            day = day_map[date.weekday()]
-            time = hours.split('-')[0].strip() if '-' in hours else hours
-            schedule[cid][day].append({
-                'class_name': name,
-                'group_name': group,
-                'time': time,
-                'location': loc or ''
-            })
-
-    dates = {day: (week_start + timedelta(days=i)).strftime('%m/%d') 
-             for i, day in enumerate(['monday','tuesday','wednesday','thursday','friday'])}
-
-    conn.close()
-
-    return render_template('admin_dashboard.html',
-                           counselors=counselors,
-                           schedule=schedule,
-                           dates=dates,
-                           week_start=week_start,
-                           week_end=week_end + timedelta(days=4),
-                           week_offset=week_offset)
+    
+    today = datetime.today().strftime('%Y-%m-%d')
+    today_classes = []
+    
+    try:
+        logger.info(f"Loading admin_dashboard for user {current_user.username}, fetching classes for date: {today}")
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT id, group_name, class_name, date, group_hours, location FROM classes WHERE date = %s ORDER BY group_name, group_hours",
+                  (today,))
+        today_classes = c.fetchall()
+        logger.info(f"Retrieved {len(today_classes)} classes for today: {[row[2] for row in today_classes]}")
+        conn.close()
+    except psycopg2.Error as e:
+        logger.error(f"Database error in admin_dashboard: {e}")
+        flash('Error loading dashboard classes. Please try again.', 'error')
+        today_classes = []
+    except Exception as e:
+        logger.error(f"Unexpected error in admin_dashboard: {e}")
+        flash('An unexpected error occurred. Please contact support.', 'error')
+        today_classes = []
+    
+    return render_template('admin_dashboard.html', today_classes=today_classes, today=today)
 
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

@@ -348,16 +348,32 @@ def admin_dashboard():
         conn = get_db_connection()
         c = conn.cursor()
 
-        # 1. Get all counselors
+        # 1. Get counselors — with fallback
         c.execute("""
             SELECT id, COALESCE(full_name, username), COALESCE(credentials, '')
             FROM users 
             WHERE role = 'counselor' 
             ORDER BY COALESCE(full_name, username)
         """)
-        counselors = [dict(id=r[0], full_name=r[1] or "Unnamed Counselor", credentials=r[2]) for r in c.fetchall()]
+        counselor_rows = c.fetchall()
+        counselors = [
+            dict(id=r[0], full_name=r[1] or "Unnamed Counselor", credentials=r[2]) 
+            for r in counselor_rows
+        ]
 
-        # 2. Get ALL classes (safe for TEXT date column)
+        # CRITICAL FIX: If no counselors, show empty schedule gracefully
+        if not counselors:
+            conn.close()
+            return render_template('admin_dashboard.html',
+                                   counselors=[], schedule={}, dates={
+                                       'monday': monday.strftime('%m/%d'),
+                                       'tuesday': (monday + timedelta(days=1)).strftime('%m/%d'),
+                                       'wednesday': (monday + timedelta(days=2)).strftime('%m/%d'),
+                                       'thursday': (monday + timedelta(days=3)).strftime('%m/%d'),
+                                       'friday': (monday + timedelta(days=4)).strftime('%m/%d'),
+                                   }, week_start=week_start, week_end=week_end, week_offset=week_offset)
+
+        # 2. Get all classes
         c.execute("""
             SELECT counselor_id, class_name, group_name, date, group_hours, location
             FROM classes 
@@ -366,7 +382,7 @@ def admin_dashboard():
         """)
         all_classes = c.fetchall()
 
-        # 3. Build weekly schedule in Python (100% reliable)
+        # 3. Build schedule safely
         schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} 
                    for c in counselors}
         day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
@@ -392,12 +408,14 @@ def admin_dashboard():
             elif hours:
                 time_str = hours.strip()
 
-            schedule[counselor_id][day].append({
-                'class_name': class_name or "Class",
-                'group_name': group_name or "Group",
-                'time': time_str,
-                'location': location or ""
-            })
+            # Only add if counselor exists (extra safety)
+            if counselor_id in schedule:
+                schedule[counselor_id][day].append({
+                    'class_name': class_name or "Class",
+                    'group_name': group_name or "Group",
+                    'time': time_str,
+                    'location': location or ""
+                })
 
         # 4. Date headers
         dates = {
@@ -409,24 +427,26 @@ def admin_dashboard():
         }
 
         conn.close()
-
         return render_template('admin_dashboard.html',
                                counselors=counselors,
                                schedule=schedule,
                                dates=dates,
-                               week_start=monday.date(),
-                               week_end=(monday + timedelta(days=4)).date(),
+                               week_start=week_start,
+                               week_end=week_end,
                                week_offset=week_offset)
 
     except Exception as e:
         logger.error(f"admin_dashboard error: {e}", exc_info=True)
         if conn:
-            conn.close()
+            try:
+                conn.close()
+            except:
+                pass
         flash("Temporary error loading schedule. Please refresh.", "error")
         return render_template('admin_dashboard.html',
                                counselors=[], schedule={}, dates={}, 
                                week_start=date.today(), week_end=date.today(), week_offset=0)
-
+    
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
 def reports():

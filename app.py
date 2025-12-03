@@ -337,84 +337,26 @@ def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
 
-    week_offset = request.args.get('week_offset', '0')
-    try:
-        week_offset = int(week_offset)
-    except:
-        week_offset = 0
-
-    today = datetime.today()
-    monday = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
-    week_start = monday.date()
-    week_end = (monday + timedelta(days=4)).date()
-
     conn = get_db_connection()
     c = conn.cursor()
-
-    try:
-        # 1. Counselors — always safe
-        c.execute("SELECT id, COALESCE(full_name, username, 'No Name'), COALESCE(credentials,'') FROM users WHERE role = 'counselor' ORDER BY full_name")
-        raw_counselors = c.fetchall()
-        counselors = [{'id': r[0], 'full_name': r[1], 'credentials': r[2].strip()} for r in raw_counselors or []]
-
-        # 2. Empty schedule — works even with zero counselors
-        schedule = {}
-        for couns in counselors:
-            schedule[couns['id']] = {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']}
-
-        # 3. Classes — ultra-defensive
-        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE date IS NOT NULL")
-        day_map = {0:'monday',1:'tuesday',2:'wednesday',3:'thursday',4:'friday'}
-
-        for row in c.fetchall():
-            cid = row[0]
-            if not cid or cid not in schedule:
-                continue
+    c.execute("SELECT id, COALESCE(full_name, username) FROM users WHERE role='counselor'")
+    counselors = [{'id': r[0], 'full_name': r[1] or 'Counselor'} for r in c.fetchall() or []]
+    
+    schedule = {c['id']: {'monday':[], 'tuesday':[], 'wednesday':[], 'thursday':[], 'friday':[]} for c in counselors}
+    
+    c.execute("SELECT counselor_id, class_name, group_name, date, group_hours FROM classes WHERE date LIKE '2025%'")
+    for cid, name, group, date, hours in c.fetchall():
+        if cid in schedule and date and len(date) >= 10:
             try:
-                date_str = str(row[3]).strip()[:10]
-                if not date_str.replace('-','').isdigit():
-                    continue
-                class_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                if not (week_start <= class_date <= week_end) or class_date.weekday() > 4:
-                    continue
-
-                day = day_map[class_date.weekday()]
-                time = "TBD"
-                if row[4]:
-                    time = str(row[4]).split('-')[0].strip() if '-' in str(row[4]) else str(row[4]).strip()
-
-                schedule[cid][day].append({
-                    'class_name': str(row[1] or "Class"),
-                    'group_name': str(row[2] or ""),
-                    'time': time,
-                    'location': str(row[5] or "").strip()
-                })
+                d = datetime.strptime(date[:10], '%Y-%m-%d').strftime('%A').lower()[:3]
+                if d in schedule[cid]:
+                    t = hours.split('-')[0] if hours and '-' in hours else "???"
+                    schedule[cid][d[:3]].append(f"{t} – {name} ({group or ''})".strip())
             except:
-                continue
-
-        # Sort by time
-        for cid in schedule:
-            for day in schedule[cid]:
-                schedule[cid][day].sort(key=lambda x: x['time'] + "z")
-
-        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
-
-        conn.close()
-        return render_template('admin_dashboard.html',
-                               counselors=counselors,
-                               schedule=schedule,
-                               dates=dates,
-                               week_start=week_start,
-                               week_end=week_end,
-                               week_offset=week_offset)
-
-    except Exception as e:
-        logger.error(f"FATAL DASHBOARD ERROR: {e}", exc_info=True)
-        try:
-            conn.close()
-        except:
-            pass
-        return "Dashboard temporarily unavailable — check logs", 500
+                pass
+    
+    conn.close()
+    return render_template('admin_dashboard.html', counselors=counselors, schedule=schedule, week="This week")
         
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

@@ -337,7 +337,12 @@ def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
 
-    week_offset = int(request.args.get('week_offset', 0))
+    week_offset = request.args.get('week_offset', '0')
+    try:
+        week_offset = int(week_offset)
+    except:
+        week_offset = 0
+
     today = datetime.today()
     monday = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
     week_start = monday.date()
@@ -347,59 +352,69 @@ def admin_dashboard():
     c = conn.cursor()
 
     try:
-        # 1. Get counselors
-        c.execute("SELECT id, COALESCE(full_name, username, 'Counselor'), COALESCE(credentials, '') FROM users WHERE role = 'counselor' ORDER BY full_name")
-        counselors = [{'id': r[0], 'full_name': r[1], 'credentials': r[2].strip() if r[2] else ''} for r in c.fetchall()]
+        # 1. Counselors — always safe
+        c.execute("SELECT id, COALESCE(full_name, username, 'No Name'), COALESCE(credentials,'') FROM users WHERE role = 'counselor' ORDER BY full_name")
+        raw_counselors = c.fetchall()
+        counselors = [{'id': r[0], 'full_name': r[1], 'credentials': r[2].strip()} for r in raw_counselors or []]
 
-        # 2. Empty schedule
-        schedule = {c['id']: {day: [] for day in ['monday','tuesday','wednesday','thursday','friday']} for c in counselors}
+        # 2. Empty schedule — works even with zero counselors
+        schedule = {}
+        for couns in counselors:
+            schedule[couns['id']] = {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']}
 
-        # 3. ONLY get ACTIVE classes with valid date format
-        c.execute("""
-            SELECT counselor_id, class_name, group_name, date, group_hours, location 
-            FROM classes 
-            WHERE (deleted_at IS NULL OR deleted_at = '')
-              AND date IS NOT NULL 
-              AND date ~ '^\\d{4}-\\d{2}-\\d{2}'
-        """)
+        # 3. Classes — ultra-defensive
+        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE date IS NOT NULL")
+        day_map = {0:'monday',1:'tuesday',2:'wednesday',3:'thursday',4:'friday'}
 
-        day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
-
-        for cid, class_name, group_name, date_str, hours, loc in c.fetchall():
+        for row in c.fetchall():
+            cid = row[0]
             if not cid or cid not in schedule:
                 continue
             try:
-                date_part = str(date_str).strip()[:10]
-                class_date = datetime.strptime(date_part, '%Y-%m-%d').date()
-                if week_start <= class_date <= week_end and class_date.weekday() <= 4:
-                    day = day_map[class_date.weekday()]
-                    time = (str(hours or "").split('-')[0].strip() if hours and '-' in str(hours) else "TBD")
-                    schedule[cid][day].append({
-                        'class_name': str(class_name or "Class"),
-                        'group_name': str(group_name or ""),
-                        'time': time,
-                        'location': str(loc or "").strip()
-                    })
+                date_str = str(row[3]).strip()[:10]
+                if not date_str.replace('-','').isdigit():
+                    continue
+                class_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                if not (week_start <= class_date <= week_end) or class_date.weekday() > 4:
+                    continue
+
+                day = day_map[class_date.weekday()]
+                time = "TBD"
+                if row[4]:
+                    time = str(row[4]).split('-')[0].strip() if '-' in str(row[4]) else str(row[4]).strip()
+
+                schedule[cid][day].append({
+                    'class_name': str(row[1] or "Class"),
+                    'group_name': str(row[2] or ""),
+                    'time': time,
+                    'location': str(row[5] or "").strip()
+                })
             except:
                 continue
 
-        # Sort all classes by time
+        # Sort by time
         for cid in schedule:
             for day in schedule[cid]:
-                schedule[cid][day].sort(key=lambda x: x['time'] + '0')  # forces string sort that works
+                schedule[cid][day].sort(key=lambda x: x['time'] + "z")
 
         dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
 
         conn.close()
         return render_template('admin_dashboard.html',
-                               counselors=counselors, schedule=schedule, dates=dates,
-                               week_start=week_start, week_end=week_end, week_offset=week_offset)
+                               counselors=counselors,
+                               schedule=schedule,
+                               dates=dates,
+                               week_start=week_start,
+                               week_end=week_end,
+                               week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"Dashboard error: {e}", exc_info=True)
-        conn.close()
-        flash("Temporary issue — reloading in 3 seconds...", "info")
-        return render_template('admin_dashboard.html', counselors=[], schedule={}, dates={}, week_start=today.date(), week_end=today.date(), week_offset=week_offset)
+        logger.error(f"FATAL DASHBOARD ERROR: {e}", exc_info=True)
+        try:
+            conn.close()
+        except:
+            pass
+        return "Dashboard temporarily unavailable — check logs", 500
         
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

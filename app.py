@@ -7,7 +7,7 @@ from flask_bcrypt import Bcrypt
 import psycopg2
 import io
 import csv
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from urllib.parse import urlparse
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
 app.jinja_env.add_extension('jinja2.ext.do')
-bcrypt = Bcrypt(app)
 
+bcrypt = Bcrypt(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -57,7 +57,226 @@ scheduler = BackgroundScheduler(jobstores={
     'default': SQLAlchemyJobStore(url=os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/dbname'))
 })
 
-# ... [init_db and all other functions remain unchanged] ...
+def init_db():
+    if os.getenv('INITIALIZE_DB', 'false').lower() == 'true':
+        max_retries = 3
+        retry_delay = 5
+        for attempt in range(max_retries):
+            try:
+                conn = get_db_connection()
+                c = conn.cursor()
+                c.execute("DROP TABLE IF EXISTS attendance CASCADE")
+                c.execute("DROP TABLE IF EXISTS class_attendees CASCADE")
+                c.execute("DROP TABLE IF EXISTS attendee_groups CASCADE")
+                c.execute("DROP TABLE IF EXISTS groups CASCADE")
+                c.execute("DROP TABLE IF EXISTS attendees CASCADE")
+                c.execute("DROP TABLE IF EXISTS classes CASCADE")
+                c.execute("DROP TABLE IF EXISTS users CASCADE")
+                logger.info("Existing tables dropped")
+
+                c.execute('''CREATE TABLE users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    credentials TEXT,
+                    email TEXT
+                )''')
+                logger.info("Users table created")
+                c.execute('''CREATE TABLE classes (
+                    id SERIAL PRIMARY KEY,
+                    group_name TEXT NOT NULL,
+                    class_name TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    group_hours TEXT NOT NULL,
+                    counselor_id INTEGER,
+                    group_type TEXT,
+                    notes TEXT,
+                    location TEXT,
+                    recurring INTEGER NOT NULL DEFAULT 0,
+                    frequency TEXT,
+                    locked BOOLEAN NOT NULL DEFAULT FALSE,
+                    FOREIGN KEY (counselor_id) REFERENCES users(id)
+                )''')
+                logger.info("Classes table created")
+                c.execute('''CREATE TABLE groups (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL
+                )''')
+                logger.info("Groups table created")
+                c.execute('''CREATE TABLE attendees (
+                    id SERIAL PRIMARY KEY,
+                    full_name TEXT NOT NULL,
+                    attendee_id TEXT UNIQUE NOT NULL,
+                    group_details TEXT,
+                    notes TEXT
+                )''')
+                logger.info("Attendees table created")
+                c.execute('''CREATE TABLE attendee_groups (
+                    attendee_id INTEGER,
+                    group_id INTEGER,
+                    PRIMARY KEY (attendee_id, group_id),
+                    FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+                )''')
+                logger.info("Attendee_groups table created")
+                c.execute('''CREATE TABLE attendance (
+                    id SERIAL PRIMARY KEY,
+                    class_id INTEGER,
+                    attendee_id INTEGER,
+                    time_in TEXT,
+                    time_out TEXT,
+                    attendance_status TEXT NOT NULL DEFAULT 'Present',
+                    notes TEXT,
+                    location TEXT,
+                    FOREIGN KEY (class_id) REFERENCES classes(id),
+                    FOREIGN KEY (attendee_id) REFERENCES attendees(id)
+                )''')
+                logger.info("Attendance table created")
+                c.execute('''CREATE TABLE class_attendees (
+                    class_id INTEGER,
+                    attendee_id INTEGER,
+                    PRIMARY KEY (class_id, attendee_id),
+                    FOREIGN KEY (class_id) REFERENCES classes(id),
+                    FOREIGN KEY (attendee_id) REFERENCES attendees(id)
+                )''')
+                logger.info("Class_attendees table created")
+
+                c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('admin', bcrypt.generate_password_hash('admin123').decode('utf-8'), 'Admin User', 'admin', 'Treatment Director', 'admin@example.com'))
+                c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('counselor1', bcrypt.generate_password_hash('counselor123').decode('utf-8'), 'Jane Doe', 'counselor', 'Clinical Trainee', 'jane@example.com'))
+                counselor1_id = c.fetchone()[0]
+                c.execute("INSERT INTO users (username, password, full_name, role, credentials, email) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('counselor2', bcrypt.generate_password_hash('counselor456').decode('utf-8'), 'Mark Johnson', 'counselor', 'Therapist', 'mark@example.com'))
+                counselor2_id = c.fetchone()[0]
+                logger.info("Sample users inserted")
+
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group A',))
+                group_a_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group B',))
+                group_b_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group C',))
+                group_c_id = c.fetchone()[0]
+                c.execute("INSERT INTO groups (name) VALUES (%s) RETURNING id", ('Group D',))
+                group_d_id = c.fetchone()[0]
+                logger.info("Sample groups inserted")
+
+                today = '2025-08-03'
+                tomorrow = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                day_after = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=2)).strftime('%Y-%m-%d')
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('Group A', 'Mindfulness', today, '10:00-11:30', counselor1_id, 'Therapy', 'Focus on relaxation', 'Office', 1, 'weekly'))
+                mindfulness_id = c.fetchone()[0]
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('Group D', 'Yoga Session', today, '13:00-14:00', counselor2_id, 'Wellness', 'Beginner-friendly', 'Zoom', 0, None))
+                yoga_id = c.fetchone()[0]
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('Group B', 'Stress Management', tomorrow, '14:00-15:30', counselor1_id, 'Workshop', 'Interactive session', 'Zoom', 0, None))
+                stress_id = c.fetchone()[0]
+                c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                          ('Group C', 'Coping Skills', day_after, '09:00-10:30', counselor2_id, 'Therapy', 'Group discussion', 'Office', 0, None))
+                coping_id = c.fetchone()[0]
+                logger.info("Sample classes inserted")
+
+                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
+                          ('John Smith', 'ATT001', 'Morning Session', 'Requires extra support'))
+                attendee_id = c.fetchone()[0]
+                c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s)", (attendee_id, group_a_id))
+                c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s)", (attendee_id, group_b_id))
+                c.execute("INSERT INTO attendees (full_name, attendee_id, group_details, notes) VALUES (%s, %s, %s, %s) RETURNING id",
+                          ('Jane Doe', 'ATT002', 'Morning Session', 'Good engagement'))
+                attendee_id2 = c.fetchone()[0]
+                c.execute("INSERT INTO attendee_groups (attendee_id, group_id) VALUES (%s, %s)", (attendee_id2, group_a_id))
+                logger.info("Sample attendees inserted")
+
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, attendance_status, notes, location) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (mindfulness_id, attendee_id, '10:00', '11:30', 'Present', 'Actively participated', 'Office'))
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, attendance_status, notes, location) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (mindfulness_id, attendee_id2, '10:00', '11:30', 'Present', 'Good engagement', 'Office'))
+                c.execute("INSERT INTO attendance (class_id, attendee_id, time_in, time_out, attendance_status, notes, location) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                          (yoga_id, attendee_id, '13:00', '14:00', 'Present', 'Good participation', 'Zoom'))
+                logger.info("Sample attendance inserted")
+
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (mindfulness_id, attendee_id))
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (mindfulness_id, attendee_id2))
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (yoga_id, attendee_id))
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (stress_id, attendee_id))
+                c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s)", (coping_id, attendee_id))
+                logger.info("Sample class-attendee assignments inserted")
+
+                conn.commit()
+                conn.close()
+                logger.info("Database initialized successfully")
+                return
+            except psycopg2.Error as e:
+                logger.error(f"Database initialization failed on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error during database initialization on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                raise
+    else:
+        logger.info("Database initialization skipped as INITIALIZE_DB is not set to 'true'")
+
+# Run init_db on app startup only if configured
+if os.getenv('INITIALIZE_DB', 'false').lower() == 'true':
+    init_db()
+
+scheduler.start()
+logger.info(f"Starting application: {__file__}")
+logger.info(f"App routes defined: {list(app.url_map.iter_rules())}")
+logger.info("Registered routes: %s", [rule.endpoint for rule in app.url_map.iter_rules()])
+
+def generate_recurring_classes():
+    conn = get_db_connection()
+    c = conn.cursor()
+    today = datetime.today().strftime('%Y-%m-%d')
+    max_date = (datetime.today() + timedelta(days=28)).strftime('%Y-%m-%d')
+    c.execute("SELECT id, group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, frequency FROM classes WHERE recurring = 1 AND date <= %s",
+              (max_date,))
+    recurring_classes = c.fetchall()
+    for cls in recurring_classes:
+        class_id, group_name, class_name, start_date, group_hours, counselor_id, group_type, notes, location, frequency = cls
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            logger.error(f"Invalid date format for class {class_id}: {start_date}")
+            continue
+        if frequency == 'weekly':
+            delta = timedelta(days=7)
+        else:
+            continue
+        current_date = start + delta
+        while current_date.strftime('%Y-%m-%d') <= max_date:
+            new_date = current_date.strftime('%Y-%m-%d')
+            c.execute("SELECT id FROM classes WHERE class_name = %s AND date = %s AND counselor_id = %s",
+                      (class_name, new_date, counselor_id))
+            if not c.fetchone():
+                try:
+                    c.execute("INSERT INTO classes (group_name, class_name, date, group_hours, counselor_id, group_type, notes, location, recurring, frequency) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                              (group_name, class_name, new_date, group_hours, counselor_id, group_type, notes, location, 1, frequency))
+                    new_class_id = c.fetchone()[0]
+                    c.execute("SELECT attendee_id FROM class_attendees WHERE class_id = %s", (class_id,))
+                    attendees = c.fetchall()
+                    for attendee in attendees:
+                        c.execute("INSERT INTO class_attendees (class_id, attendee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                                  (new_class_id, attendee[0]))
+                    logger.info(f"Generated recurring class {class_name} for {new_date} with recurring=1")
+                except psycopg2.Error as e:
+                    logger.error(f"Error generating recurring class for {class_name} on {new_date}: {e}")
+            current_date += delta
+    conn.commit()
+    conn.close()
+    logger.info("Recurring classes generated")
+
+scheduler.add_job(generate_recurring_classes, 'interval', days=1, id='generate_recurring_classes', replace_existing=True)
 
 class User(UserMixin):
     def __init__(self, id, username, role):
@@ -76,7 +295,41 @@ def load_user(user_id):
         return User(user[0], user[1], user[2])
     return None
 
-# ... [all other routes: login, reports, manage_*, counselor_*, etc. remain unchanged] ...
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        logger.info(f"Login attempt for username: {username}")
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,))
+        user = c.fetchone()
+        conn.close()
+        if user and bcrypt.check_password_hash(user[2], password):
+            user_obj = User(user[0], user[1], user[3])
+            login_user(user_obj)
+            logger.info(f"Login successful for user: {username}, role: {user[3]}")
+            if user[3] == 'admin':
+                logger.info("Redirecting to admin_dashboard")
+                return redirect(url_for('admin_dashboard'))
+            elif user[3] == 'counselor':
+                logger.info("Redirecting to counselor_dashboard")
+                try:
+                    redirect_url = url_for('counselor_dashboard')
+                    logger.info(f"Generated redirect URL: {redirect_url}")
+                    return redirect(redirect_url)
+                except BuildError as e:
+                    logger.error(f"Failed to redirect to counselor_dashboard for user: {username}. Error: {str(e)}")
+                    flash('Counselor dashboard is currently unavailable.')
+                    return redirect(url_for('login'))
+        flash('Invalid username or password')
+        logger.warning(f"Login failed for username: {username}")
+    return render_template('login.html')
 
 @app.route('/admin_dashboard')
 @login_required
@@ -173,7 +426,7 @@ def admin_dashboard():
         return render_template('admin_dashboard.html',
                                counselors=[], schedule={}, dates={}, 
                                week_start=date.today(), week_end=date.today(), week_offset=0)
-        
+
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
 def reports():

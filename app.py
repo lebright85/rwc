@@ -347,7 +347,7 @@ def admin_dashboard():
     c = conn.cursor()
 
     try:
-        # 1. Get counselors with credentials
+        # 1. Get all counselors safely
         c.execute("""
             SELECT id,
                    COALESCE(full_name, username, 'Counselor'),
@@ -357,56 +357,52 @@ def admin_dashboard():
             ORDER BY COALESCE(full_name, username)
         """)
         counselors = [
-            {'id': r[0], 'full_name': r[1], 'credentials': r[2].strip() if r[2] else ''}
-            for r in c.fetchall()
+            {'id': row[0], 'full_name': row[1], 'credentials': row[2].strip() if row[2] else ''}
+            for row in c.fetchall()
         ]
 
-        # 2. Pre-build empty schedule
+        # 2. Build empty schedule first (prevents KeyError)
         schedule = {
-            counselor['id']: {day: [] for day in ['monday','tuesday','wednesday','thursday','friday']}
+            counselor['id']: {
+                'monday': [], 'tuesday': [], 'wednesday': [], 'thursday': [], 'friday': []
+            }
             for counselor in counselors
         }
 
-        # 3. Fetch only valid date classes
+        # 3. Only pull classes with valid YYYY-MM-DD dates
         c.execute("""
             SELECT counselor_id, class_name, group_name, date, group_hours, location
             FROM classes
-            WHERE (deleted_at IS NULL OR deleted_at = '')
-              AND date IS NOT NULL
-              AND date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            WHERE date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND counselor_id IS NOT NULL
         """)
 
         day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
 
         for cid, class_name, group_name, date_str, hours, loc in c.fetchall():
             try:
-                date_part = date_str.strip().split(' ')[0]
-                class_date = datetime.strptime(date_part, '%Y-%m-%d').date()
-
+                class_date = datetime.strptime(date_str.strip()[:10], '%Y-%m-%d').date()
                 if not (week_start <= class_date <= week_end):
                     continue
                 if class_date.weekday() > 4:
                     continue
 
                 day = day_map[class_date.weekday()]
-                time = (hours or "").split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
-                location = loc.strip() if loc else ""
+                start_time = hours.split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
+                location = (loc or "").strip()
 
                 if cid in schedule:
                     schedule[cid][day].append({
                         'class_name': class_name or "Class",
                         'group_name': group_name or "",
-                        'time': time,
+                        'time': start_time,
                         'location': location
                     })
-
-                # Sort by time
-                schedule[cid][day].sort(key=lambda x: x['time'])
+                    schedule[cid][day].sort(key=lambda x: x['time'])
 
             except Exception:
-                continue  # skip bad rows silently
+                continue  # skip any bad row silently
 
-        # Date headers
+        # Date headers for the table
         dates = {
             (monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A')
             for i in range(5)
@@ -421,11 +417,13 @@ def admin_dashboard():
                                week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"Admin dashboard error: {e}", exc_info=True)
-        flash("Dashboard loaded with partial data due to an error.", "warning")
+        logger.error(f"Admin dashboard crashed: {e}", exc_info=True)
+        flash("Dashboard had an issue — showing empty schedule.", "danger")
         return render_template('admin_dashboard.html',
                                counselors=[], schedule={}, dates={},
-                               week_start=today.date(), week_end=today.date(), week_offset=0)
+                               week_start=today.date(), week_end=today.date(),
+                               week_offset=week_offset)
+
     finally:
         conn.close()
         

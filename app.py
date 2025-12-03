@@ -343,63 +343,61 @@ def admin_dashboard():
     week_start = monday.date()
     week_end = (monday + timedelta(days=4)).date()
 
-    conn = None
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
         c = conn.cursor()
 
-        # Get counselors
-        c.execute("""
-            SELECT id, COALESCE(full_name, username), COALESCE(credentials, '')
-            FROM users WHERE role = 'counselor' 
-            ORDER BY COALESCE(full_name, username)
-        """)
-        counselors = [dict(id=r[0], full_name=r[1] or "Counselor", credentials=r[2]) for r in c.fetchall()]
+        # FIXED PART STARTS HERE
+        c.execute("SELECT id, COALESCE(full_name, username, 'Unknown'), COALESCE(credentials, '') FROM users WHERE role = 'counselor'")
+        counselors = []
+        for row in c.fetchall():
+            counselors.append({
+                'id': row[0],
+                'full_name': row[1] if row[1] else "Counselor",
+                'credentials': row[2]
+            })
 
-        # If no counselors → show empty but beautiful schedule
-        schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} 
-                   for c in counselors} if counselors else {}
+        # Build empty schedule first — this can NEVER crash
+        schedule = {}
+        for counselor in counselors:
+            schedule[counselor['id']] = {
+                'monday': [], 'tuesday': [], 'wednesday': [], 'thursday': [], 'friday': []
+            }
 
-        # Get all classes
-        c.execute("""
-            SELECT counselor_id, class_name, group_name, date, group_hours, location 
-            FROM classes 
-            WHERE (deleted_at IS NULL OR deleted_at = '')
-        """)
-        rows = c.fetchall()
-
+        # Now safely add classes
+        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE deleted_at IS NULL OR deleted_at = ''")
         day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
 
-        for row in rows:
-            counselor_id, class_name, group_name, date_str, hours, location = row
-            if not date_str or not date_str.strip():
+        for row in c.fetchall():
+            cid, cname, gname, dstr, hours, loc = row
+            if not dstr or not dstr.strip():
                 continue
             try:
-                class_date = datetime.strptime(date_str.split(' ')[0], '%Y-%m-%d').date()
+                cdate = datetime.strptime(dstr.split(' ')[0], '%Y-%m-%d').date()
             except:
                 continue
+            if not (week_start <= cdate <= week_end) or cdate.weekday() > 4:
+                continue
 
-            if week_start <= class_date <= week_end and class_date.weekday() <= 4:
-                day = day_map[class_date.weekday()]
-                time = (hours.split('-')[0].strip() if hours and '-' in hours else hours) or "Time TBD"
-                if counselor_id in schedule:
-                    schedule[counselor_id][day].append({
-                        'class_name': class_name or "Class",
-                        'group_name': group_name or "Group",
-                        'time': time,
-                        'location': location or ""
-                    })
+            day = day_map[cdate.weekday()]
+            time = hours.split('-')[0].strip() if hours and '-' in hours else (hours or "TBD")
 
-        # Date headers
+            if cid in schedule:
+                schedule[cid][day].append({
+                    'class_name': cname or "Class",
+                    'group_name': gname or "",
+                    'time': time,
+                    'location': loc or ""
+                })
+
         dates = {
             'monday': monday.strftime('%m/%d'),
-            'tuesday': (monday + timedelta(days=1)).strftime('%m/%d'),
-            'wednesday': (monday + timedelta(days=2)).strftime('%m/%d'),
-            'thursday': (monday + timedelta(days=3)).strftime('%m/%d'),
-            'friday': (monday + timedelta(days=4)).strftime('%m/%d'),
+            'tuesday': (monday + timedelta(1)).strftime('%m/%d'),
+            'wednesday': (monday + timedelta(2)).strftime('%m/%d'),
+            'thursday': (monday + timedelta(3)).strftime('%m/%d'),
+            'friday': (monday + timedelta(4)).strftime('%m/%d'),
         }
 
-        conn.close()
         return render_template('admin_dashboard.html',
                                counselors=counselors,
                                schedule=schedule,
@@ -409,14 +407,12 @@ def admin_dashboard():
                                week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"admin_dashboard error: {e}", exc_info=True)
-        if conn:
-            conn.close()
-        flash("Temporary error loading schedule. Please refresh.", "error")
-        return render_template('admin_dashboard.html',
-                               counselors=[], schedule={}, dates={},
-                               week_start=date.today(), week_end=date.today(), week_offset=0)
-    
+        logger.error(f"ADMIN DASHBOARD FINAL ERROR: {e}", exc_info=True)
+        flash("Still loading… one second.", "info")
+        return render_template('admin_dashboard.html', counselors=[], schedule={}, dates={}, week_start=today.date(), week_end=today.date(), week_offset=0)
+    finally:
+        conn.close()
+        
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
 def reports():

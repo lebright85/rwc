@@ -336,39 +336,54 @@ def login():
 def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
-    
+
+    week_offset = int(request.args.get('week_offset', 0))
+    today = datetime.today()
+    start_of_week = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
+    week_start = start_of_week
+    week_end = start_of_week + timedelta(days=4)  # Friday
+
     conn = get_db_connection()
     c = conn.cursor()
-    
-    sort_by = request.args.get('sort_by', 'date_asc')
-    
-    query = """
-        SELECT c.id, c.group_name, c.class_name, c.date, c.group_hours, c.location,
-               u.full_name AS counselor_name, c.recurring, c.locked
+
+    c.execute("SELECT id, full_name, credentials FROM users WHERE role = 'counselor' ORDER BY full_name")
+    counselors = [dict(id=row[0], full_name=row[1] or row[1], credentials=row[2]) for row in c.fetchall()]
+
+    c.execute("""
+        SELECT c.counselor_id, c.class_name, c.group_name, c.date, c.group_hours, c.location
         FROM classes c
-        LEFT JOIN users u ON c.counselor_id = u.id
-        WHERE c.deleted_at IS NULL
-    """
-    
-    if sort_by == 'date_asc':
-        query += " ORDER BY c.date ASC, c.group_hours ASC"
-    elif sort_by == 'date_desc':
-        query += " ORDER BY c.date DESC, c.group_hours DESC"
-    elif sort_by == 'group':
-        query += " ORDER BY c.group_name ASC, c.date ASC"
-    
-    try:
-        c.execute(query)
-        classes = c.fetchall()
-    except Exception as e:
-        logger.error(f"Error loading admin dashboard: {e}")
-        classes = []
-    finally:
-        conn.close()
-    
-    return render_template('admin_dashboard.html', 
-                         classes=classes, 
-                         sort_by=sort_by)
+        WHERE c.date BETWEEN %s AND %s AND (c.deleted_at IS NULL)
+        ORDER BY c.counselor_id, c.date, c.group_hours
+    """, (week_start.date(), (week_end + timedelta(days=1)).date()))
+    raw_classes = c.fetchall()
+
+    schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} for c in counselors}
+    day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
+
+    for cls in raw_classes:
+        cid, name, group, date, hours, loc = cls
+        if date.weekday() < 5:
+            day = day_map[date.weekday()]
+            time = hours.split('-')[0].strip() if '-' in hours else hours
+            schedule[cid][day].append({
+                'class_name': name,
+                'group_name': group,
+                'time': time,
+                'location': loc or ''
+            })
+
+    dates = {day: (week_start + timedelta(days=i)).strftime('%m/%d') 
+             for i, day in enumerate(['monday','tuesday','wednesday','thursday','friday'])}
+
+    conn.close()
+
+    return render_template('admin_dashboard.html',
+                           counselors=counselors,
+                           schedule=schedule,
+                           dates=dates,
+                           week_start=week_start,
+                           week_end=week_end + timedelta(days=4),
+                           week_offset=week_offset)
 
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="min-h-screen bg-gray-50">
-    <!-- Top Navigation Bar -->
+    <!-- Top Navigation -->
     <div class="bg-indigo-800 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold">RWC Admin Weekly Schedule</h1>
-            <div class="flex gap-6 text-sm">
-                <a href="{{ url_for('manage_classes') }}" class="hover:underline font-medium">Manage Classes (List View)</a>
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold">RWC Admin – Weekly Schedule</h1>
+            <div class="flex gap-8 text-sm font-medium">
+                <a href="{{ url_for('manage_classes') }}" class="hover:underline">Manage Classes</a>
                 <a href="{{ url_for('manage_users') }}" class="hover:underline">Users</a>
                 <a href="{{ url_for('reports') }}" class="hover:underline">Reports</a>
                 <a href="{{ url_for('logout') }}" class="hover:underline">Logout</a>
@@ -14,22 +14,20 @@
         </div>
     </div>
 
-    <!-- Main Weekly Schedule -->
     <div class="max-w-7xl mx-auto p-6">
+        <!-- Week Header -->
         <div class="flex justify-between items-center mb-6">
-            <h2 class="text-3xl font-bold text-gray-800">
-                Weekly Schedule
-            </h2>
+            <h2 class="text-3xl font-bold text-gray-800">Weekly Schedule</h2>
             <div class="flex items-center gap-4">
                 <a href="{{ url_for('admin_dashboard', week_offset=week_offset - 1) }}" 
-                   class="bg-gray-600 text-white px-5 py-3 rounded-lg hover:bg-gray-700 font-medium">
+                   class="bg-gray-700 text-white px-6 py-3 rounded-lg hover:bg-gray-800 font-medium shadow">
                     Previous Week
                 </a>
                 <div class="text-xl font-bold text-gray-700">
-                    {{ week_start.strftime('%B %d') }} – {{ week_end.strftime('%B %d, %Y') }}
+                    {{ week_start.strftime('%B %d') }} – {{ (week_start + timedelta(days=4)).strftime('%B %d, %Y') }}
                 </div>
                 <a href="{{ url_for('admin_dashboard', week_offset=week_offset + 1) }}" 
-                   class="bg-gray-600 text-white px-5 py-3 rounded-lg hover:bg-gray-700 font-medium">
+                   class="bg-gray-700 text-white px-6 py-3 rounded-lg hover:bg-gray-800 font-medium shadow">
                     Next Week
                 </a>
             </div>
@@ -38,56 +36,42 @@
         <!-- Export Button -->
         <div class="mb-6">
             <a href="{{ url_for('export_weekly_schedule', week_offset=week_offset) }}" 
-               class="inline-block bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 font-bold shadow-md">
+               class="inline-block bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 font-bold shadow-lg text-lg">
                 Export to CSV (Print-Friendly)
             </a>
         </div>
 
-        <!-- Schedule Table -->
-        <div class="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200">
-            <table class="min-w-full table-auto">
+        <!-- Weekly Grid -->
+        <div class="bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-300">
+            <table class="min-w-full">
                 <thead class="bg-indigo-800 text-white">
                     <tr>
-                        <th class="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider sticky left-0 bg-indigo-800 z-20">
-                            Counselor
-                        </th>
-                        <th class="px-6 py-5 text-center text-sm font-bold uppercase tracking-wider">
-                            Monday<br><span class="text-xs font-normal">{{ dates.monday }}</span>
-                        </th>
-                        <th class="px-6 py-5 text-center text-sm font-bold uppercase tracking-wider">
-                            Tuesday<br><span class="text-xs font-normal">{{ dates.tuesday }}</span>
-                        </th>
-                        <th class="px-6 py-5 text-center text-sm font-bold uppercase tracking-wider">
-                            Wednesday<br><span class="text-xs font-normal">{{ dates.wednesday }}</span>
-                        </th>
-                        <th class="px-6 py-5 text-center text-sm font-bold uppercase tracking-wider">
-                            Thursday<br><span class="text-xs font-normal">{{ dates.thursday }}</span>
-                        </th>
-                        <th class="px-6 py-5 text-center text-sm font-bold uppercase tracking-wider">
-                            Friday<br><span class="text-xs font-normal">{{ dates.friday }}</span>
-                        </th>
+                        <th class="px-6 py-5 text-left font-bold uppercase tracking-wider sticky left-0 bg-indigo-800 z-20">Counselor</th>
+                        <th class="px-6 py-5 text-center font-bold uppercase tracking-wider">Monday<br><span class="text-xs font-normal">{{ dates.monday }}</span></th>
+                        <th class="px-6 py-5 text-center font-bold uppercase tracking-wider">Tuesday<br><span class="text-xs font-normal">{{ dates.tuesday }}</span></th>
+                        <th class="px-6 py-5 text-center font-bold uppercase tracking-wider">Wednesday<br><span class="text-xs font-normal">{{ dates.wednesday }}</span></th>
+                        <th class="px-6 py-5 text-center font-bold uppercase tracking-wider">Thursday<br><span class="text-xs font-normal">{{ dates.thursday }}</span></th>
+                        <th class="px-6 py-5 text-center font-bold uppercase tracking-wider">Friday<br><span class="text-xs font-normal">{{ dates.friday }}</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     {% for counselor in counselors %}
-                    <tr class="hover:bg-gray-50 transition-colors">
+                    <tr class="hover:bg-gray-50">
                         <td class="px-6 py-5 font-bold text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-300 whitespace-nowrap">
                             {{ counselor.full_name }}
-                            {% if counselor.credentials %}
-                            <span class="text-indigo-600 text-xs block">({{ counselor.credentials }})</span>
-                            {% endif %}
+                            {% if counselor.credentials %}<span class="text-indigo-600 text-xs block">({{ counselor.credentials }})</span>{% endif %}
                         </td>
-                        {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] %}
+                        {% for day in ['monday','tuesday','wednesday','thursday','friday'] %}
                         <td class="px-6 py-5 text-center align-top min-h-40 border-r border-gray-200 last:border-r-0">
-                            {% set day_classes = schedule[counselor.id][day] %}
-                            {% if day_classes %}
-                                {% for class in day_classes|sort(attribute='time') %}
-                                <div class="mb-4 p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-300 shadow hover:shadow-lg transition-shadow">
-                                    <div class="text-xs font-bold text-indigo-900">{{ class.time }}</div>
-                                    <div class="font-semibold text-gray-800">{{ class.class_name }}</div>
-                                    <div class="text-sm text-gray-700 font-medium">{{ class.group_name }}</div>
-                                    {% if class.location %}
-                                    <div class="text-xs text-gray-500 italic mt-1">{{ class.location }}</div>
+                            {% set classes = schedule[counselor.id][day] %}
+                            {% if classes %}
+                                {% for cls in classes|sort(attribute='time') %}
+                                <div class="mb-4 p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-300 shadow hover:shadow-md transition-all">
+                                    <div class="text-xs font-bold text-indigo-900">{{ cls.time }}</div>
+                                    <div class="font-semibold text-gray-800">{{ cls.class_name }}</div>
+                                    <div class="text-sm font-medium text-gray-700">{{ cls.group_name }}</div>
+                                    {% if cls.location %}
+                                    <div class="text-xs text-gray-500 italic mt-1">{{ cls.location }}</div>
                                     {% endif %}
                                 </div>
                                 {% endfor %}
@@ -102,9 +86,10 @@
             </table>
         </div>
 
-        <!-- Print Tip -->
-        <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-            Tip: Use the "Export to CSV" button above → open in Excel → print landscape for perfect staff handouts!
+        <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+            <p class="text-blue-800 font-medium">
+                Use the "Export to CSV" button → open in Excel → print in landscape mode for perfect staff schedules!
+            </p>
         </div>
     </div>
 </div>

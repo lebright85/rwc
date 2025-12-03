@@ -339,17 +339,19 @@ def admin_dashboard():
 
     week_offset = int(request.args.get('week_offset', 0))
     
-    # Always start on Monday
+    # --- ALWAYS Monday of the selected week ---
     today = datetime.today()
-    monday = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
+    monday_this_week = today - timedelta(days=today.weekday())
+    monday = monday_this_week + timedelta(days=week_offset * 7)
+    
     week_start = monday
     week_end = monday + timedelta(days=4)  # Friday
 
-    conn = get_db_connection()
-    c = conn.cursor()
-
     try:
-        # Get all counselors (safe fallback if full_name is NULL)
+        conn = get_db_connection()
+        c = conn.cursor()
+
+        # 1. Get all counselors
         c.execute("""
             SELECT id, COALESCE(full_name, username), COALESCE(credentials, '')
             FROM users 
@@ -358,18 +360,18 @@ def admin_dashboard():
         """)
         counselors = [dict(id=r[0], full_name=r[1], credentials=r[2]) for r in c.fetchall()]
 
-        # Get classes for Mon–Fri of this week
+        # 2. Get ALL classes from Monday to Friday inclusive
         c.execute("""
             SELECT c.counselor_id, c.class_name, c.group_name, c.date, 
                    COALESCE(c.group_hours, ''), COALESCE(c.location, '')
             FROM classes c
             WHERE c.date >= %s AND c.date <= %s AND (c.deleted_at IS NULL)
             ORDER BY c.counselor_id, c.date, c.group_hours
-        """, (week_start.date(), week_end.date()))
+        """, (week_start.date(), week_end.date()))  # Friday included
 
         raw_classes = c.fetchall()
 
-        # Initialize empty schedule
+        # 3. Build schedule
         schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} 
                    for c in counselors}
 
@@ -377,28 +379,28 @@ def admin_dashboard():
 
         for row in raw_classes:
             counselor_id, class_name, group_name, class_date, hours, location = row
-            if class_date.weekday() > 4:  # Skip Sat/Sun
+            if class_date.weekday() > 4:
                 continue
             day = day_map[class_date.weekday()]
 
-            # Safely extract start time
+            # Extract time safely
             time_str = "Time TBD"
-            if hours and isinstance(hours, str):
+            if hours:
                 if '-' in hours:
                     time_str = hours.split('-')[0].strip()
                 elif ':' in hours:
-                    time_str = hours.split()[0] if ' ' in hours else hours
+                    time_str = hours.split()[0] if len(hours.split()) > 0 else hours
                 else:
                     time_str = hours.strip()
 
             schedule[counselor_id][day].append({
-                'class_name': class_name or "Unnamed Class",
-                'group_name': group_name or "No Group",
+                'class_name': class_name or "Class",
+                'group_name': group_name or "Group",
                 'time': time_str,
-                'location': location
+                'location': location or ""
             })
 
-        # Date headers (MM/DD)
+        # 4. Date headers
         dates = {
             'monday': monday.strftime('%m/%d'),
             'tuesday': (monday + timedelta(days=1)).strftime('%m/%d'),
@@ -418,9 +420,8 @@ def admin_dashboard():
                                week_offset=week_offset)
 
     except Exception as e:
-        logger.error(f"Critical error in admin_dashboard: {e}", exc_info=True)
-        conn.close()
-        flash("Error loading schedule. Showing empty view.", "warning")
+        logger.error(f"admin_dashboard error: {e}", exc_info=True)
+        flash("Database connection failed. Please try again.", "error")
         return render_template('admin_dashboard.html',
                                counselors=[], schedule={}, dates={}, 
                                week_start=date.today(), week_end=date.today(), week_offset=0)

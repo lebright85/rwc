@@ -379,7 +379,7 @@ def admin_dashboard():
         if all(len(day_list) == 0 for c in schedule.values() for day_list in c.values()) and week_offset == 0:
             return redirect(url_for('admin_dashboard', week_offset=26))  # ~Jan 1, 2026
 
-        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
+               dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
 
         conn.close()
         return render_template('admin_dashboard.html',
@@ -393,8 +393,8 @@ def admin_dashboard():
     except Exception as e:
         logger.error(f"Dashboard error: {e}", exc_info=True)
         conn.close()
-        return "<h1>Dashboard loading... (final fix applied)</h1>", 200
-    
+        return render_template('admin_dashboard.html', counselors=[], schedule={}, dates={}, week_offset=0)
+        
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
 def reports():

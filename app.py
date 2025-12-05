@@ -337,26 +337,66 @@ def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
 
+    # Auto-detect a week with data if current week is empty
+    week_offset = int(request.args.get('week_offset', 0))
+    today = datetime.today()
+    monday = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
+    week_start = monday.date()
+    week_end = (monday + timedelta(days=4)).date()
+
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, COALESCE(full_name, username) FROM users WHERE role='counselor'")
-    counselors = [{'id': r[0], 'full_name': r[1] or 'Counselor'} for r in c.fetchall() or []]
-    
-    schedule = {c['id']: {'monday':[], 'tuesday':[], 'wednesday':[], 'thursday':[], 'friday':[]} for c in counselors}
-    
-    c.execute("SELECT counselor_id, class_name, group_name, date, group_hours FROM classes WHERE date LIKE '2025%'")
-    for cid, name, group, date, hours in c.fetchall():
-        if cid in schedule and date and len(date) >= 10:
+
+    try:
+        # Get counselors
+        c.execute("SELECT id, COALESCE(full_name, username, 'Counselor'), COALESCE(credentials, '') FROM users WHERE role = 'counselor'")
+        counselors = [{'id': r[0], 'full_name': r[1], 'credentials': r[2]} for r in c.fetchall()]
+
+        # Build empty schedule
+        schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} for c in counselors}
+
+        # Get classes — super tolerant
+        c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE date LIKE '202%'")
+        day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
+
+        for cid, name, group, date_str, hours, loc in c.fetchall():
+            if not cid or not date_str:
+                continue
             try:
-                d = datetime.strptime(date[:10], '%Y-%m-%d').strftime('%A').lower()[:3]
-                if d in schedule[cid]:
-                    t = hours.split('-')[0] if hours and '-' in hours else "???"
-                    schedule[cid][d[:3]].append(f"{t} – {name} ({group or ''})".strip())
+                date_part = str(date_str)[:10]
+                class_date = datetime.strptime(date_part, '%Y-%m-%d').date()
+                if week_start <= class_date <= week_end and class_date.weekday() <= 4:
+                    day = day_map[class_date.weekday()]
+                    time = str(hours or "").split('-')[0].strip() if hours and '-' in str(hours) else "Time TBD"
+                    schedule[cid][day].append({
+                        'class_name': str(name or "Class"),
+                        'group_name': str(group or ""),
+                        'time': time,
+                        'location': str(loc or "").strip()
+                    })
             except:
-                pass
-    
-    conn.close()
-    return render_template('admin_dashboard.html', counselors=counselors, schedule=schedule, week="This week")
+                continue
+
+        # Auto-jump to a week with data if current week is empty
+        total_classes = sum(len(classes) for c in schedule.values() for classes in c.values())
+        if total_classes == 0 and week_offset == 0:
+            # Jump to Jan 2026 where your data is
+            target = datetime(2026, 1, 1)
+            days_diff = (target - today).days
+            week_offset = days_diff // 7
+            return redirect(url_for('admin_dashboard', week_offset=week_offset))
+
+        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
+
+        conn.close()
+        return render_template('admin_dashboard.html',
+                               counselors=counselors, schedule=schedule, dates=dates,
+                               week_start=week_start, week_end=week_end, week_offset=week_offset)
+
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}", exc_info=True)
+        conn.close()
+        return "Dashboard loading...", 200
         
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required

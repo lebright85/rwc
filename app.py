@@ -377,7 +377,7 @@ def admin_dashboard():
 
         # Auto-jump to January 2026 if current week is empty
         if all(len(day_list) == 0 for c in schedule.values() for day_list in c.values()) and week_offset == 0:
-            return redirect(url_for('admin_dashboard', week_offset=36))  # ~Jan 1, 2026
+            return redirect(url_for('admin_dashboard', week_offset=26))  # ~Jan 1, 2026
 
         dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
 

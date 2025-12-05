@@ -347,14 +347,14 @@ def admin_dashboard():
     c = conn.cursor()
 
     try:
-        # Get all counselors
-        c.execute("SELECT id, COALESCE(full_name, username), COALESCE(credentials,'') FROM users WHERE role = 'counselor' ORDER BY full_name")
+        # Get counselors
+        c.execute("SELECT id, COALESCE(full_name, username), COALESCE(credentials,'') FROM users WHERE role = 'counselor'")
         counselors = [{'id': r[0], 'full_name': r[1], 'credentials': r[2].strip() if r[2] else ''} for r in c.fetchall()]
 
-        # Build schedule
+        # Build empty schedule
         schedule = {c['id']: {d: [] for d in ['monday','tuesday','wednesday','thursday','friday']} for c in counselors}
 
-        # Get classes — tolerant to any garbage
+        # Get classes
         c.execute("SELECT counselor_id, class_name, group_name, date, group_hours, location FROM classes WHERE date LIKE '202%'")
         day_map = {0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday'}
 
@@ -365,7 +365,7 @@ def admin_dashboard():
                 class_date = datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
                 if week_start <= class_date <= week_end and class_date.weekday() <= 4:
                     day = day_map[class_date.weekday()]
-                    time = str(hours or "").split('-', 1)[0].strip() if hours and '-' in str(hours) else "Time TBD"
+                    time = str(hours or "").split('-')[0].strip() if hours and '-' in str(hours) else "Time TBD"
                     schedule[cid][day].append({
                         'class_name': str(name or "Class"),
                         'group_name': str(group or ""),
@@ -377,9 +377,9 @@ def admin_dashboard():
 
         # Auto-jump to January 2026 if current week is empty
         if all(len(day_list) == 0 for c in schedule.values() for day_list in c.values()) and week_offset == 0:
-            return redirect(url_for('admin_dashboard', week_offset=26))  # ~Jan 1, 2026
+            return redirect(url_for('admin_dashboard', week_offset=26))
 
-               dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
+        dates = {(monday + timedelta(i)).strftime('%m/%d'): (monday + timedelta(i)).strftime('%A') for i in range(5)}
 
         conn.close()
         return render_template('admin_dashboard.html',

@@ -337,44 +337,26 @@ def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('login'))
 
-    week_offset = int(request.args.get('week_offset', 0))
-    today = datetime.today()
-    monday = today - timedelta(days=today.weekday()) + timedelta(days=week_offset * 7)
-
     conn = get_db_connection()
     c = conn.cursor()
+    c.execute("SELECT id, COALESCE(full_name, username) FROM users WHERE role='counselor'")
+    counselors = [{'id': r[0], 'full_name': r[1] or 'Counselor'} for r in c.fetchall()]
 
-    # Get counselors
-    c.execute("SELECT id, COALESCE(full_name, username) FROM users WHERE role = 'counselor'")
-    counselors = [{'id': r[0], 'full_name': r[1]} for r in c.fetchall()]
-
-    # Empty schedule
     schedule = {c['id']: {'monday':[], 'tuesday':[], 'wednesday':[], 'thursday':[], 'friday':[]} for c in counselors}
 
-    # Get classes
-    c.execute("SELECT counselor_id, class_name, group_name, date, group_hours FROM classes WHERE date LIKE '202%'")
-    day_map = {0:'monday',1:'tuesday',2:'wednesday',3:'thursday',4:'friday'}
-
+    c.execute("SELECT counselor_id, class_name, group_name, date, group_hours FROM classes WHERE date LIKE '2026%'")
     for cid, name, group, date, hours in c.fetchall():
-        if cid and cid in schedule and date:
+        if cid in schedule and date:
             try:
-                d = datetime.strptime(str(date)[:10], '%Y-%m-%d').date()
-                if monday.date() <= d <= (monday + timedelta(4)).date():
-                    day = day_map[d.weekday()]
-                    time = str(hours).split('-')[0].strip() if hours and '-' in str(hours) else "???"
-                    schedule[cid][day].append(f"{time} — {name} ({group or ''})")
+                d = datetime.strptime(str(date)[:10], '%Y-%m-%d')
+                day = ['monday','tuesday','wednesday','thursday','friday'][d.weekday()]
+                time = str(hours).split('-')[0].strip() if hours and '-' in str(hours) else "???"
+                schedule[cid][day].append(f"{time} – {name} – {group or ''}")
             except:
                 pass
 
-    # Jump to 2026 if empty
-    if week_offset == 0 and not any(any(classes) for classes in schedule.values()):
-        return redirect(url_for('admin_dashboard', week_offset=26))
-
     conn.close()
-    return render_template('admin_dashboard.html',
-                           counselors=counselors,
-                           schedule=schedule,
-                           week_start=monday.strftime('%B %d, %Y'))
+    return render_template('admin_dashboard.html', counselors=counselors, schedule=schedule)
     
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
